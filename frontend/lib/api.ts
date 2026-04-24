@@ -30,6 +30,14 @@ export interface UserProfile {
   created_at: string;
 }
 
+export interface AdminUser {
+  id: string;
+  email: string;
+  role: "student" | "teacher" | "admin";
+  is_active: boolean;
+  created_at: string;
+}
+
 export const login = (email: string, password: string) =>
   api.post<AuthResponse>("/api/auth/login", { email, password });
 
@@ -47,6 +55,13 @@ export const logout = (mode: "insecure" | "secure" = "insecure") =>
 
 export const deleteAccount = (mode: "insecure" | "secure" = "insecure") =>
   api.delete(`/api/auth/me?mode=${mode}`);
+
+// ─── Admin ───────────────────────────────────────────────────────────────────
+
+export const listAdminUsers = () => api.get<AdminUser[]>("/api/admin/users");
+
+export const deleteAdminUser = (userId: string) =>
+  api.delete(`/api/admin/users/${encodeURIComponent(userId)}`);
 
 // ─── Marks ───────────────────────────────────────────────────────────────────
 

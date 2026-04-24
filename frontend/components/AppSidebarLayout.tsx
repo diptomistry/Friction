@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, LayoutDashboard, LogOut, Upload, UserCircle } from "lucide-react";
+import {
+  BookOpen,
+  LayoutDashboard,
+  LogOut,
+  ShieldAlert,
+  Upload,
+  UserCircle,
+} from "lucide-react";
 import { useStore } from "@/lib/store";
 import { logout as apiLogout } from "@/lib/api";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,7 +38,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-const navLinks = [
+const baseNavLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/classrooms", label: "Classrooms", icon: BookOpen },
   { href: "/uploads", label: "Uploads", icon: Upload },
@@ -87,6 +94,14 @@ export default function AppSidebarLayout({
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
       .join("") || "CX";
+
+  const navLinks =
+    user?.role === "admin"
+      ? [
+          ...baseNavLinks,
+          { href: "/dashboard/users", label: "Manage Users", icon: ShieldAlert },
+        ]
+      : baseNavLinks;
 
   return (
     <SidebarProvider>
@@ -149,7 +164,7 @@ export default function AppSidebarLayout({
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => router.push("/dashboard?panel=profile")}
+                  onClick={() => router.push("/dashboard/profile")}
                   className="cursor-pointer rounded-lg"
                 >
                   <UserCircle className="mr-2 h-4 w-4" />

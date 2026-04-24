@@ -49,7 +49,7 @@ const DEMO_FILES: FileEntry[] = [
 
 export default function UploadsPage() {
   const router = useRouter();
-  const { user, token } = useStore();
+  const { user, token, hasHydrated } = useStore();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [files, setFiles] = useState<FileEntry[]>(DEMO_FILES);
@@ -57,8 +57,8 @@ export default function UploadsPage() {
   const [mode, setMode] = useState<"secure" | "insecure">("secure");
 
   useEffect(() => {
-    if (!token) router.push("/login");
-  }, [token, router]);
+    if (hasHydrated && !token) router.push("/login");
+  }, [hasHydrated, token, router]);
 
   const handleUpload = async () => {
     const file = fileRef.current?.files?.[0];
@@ -111,7 +111,7 @@ export default function UploadsPage() {
     }
   };
 
-  if (!user) return null;
+  if (!hasHydrated || !user) return null;
 
   const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 

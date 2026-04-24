@@ -56,7 +56,7 @@ const DEMO_CLASSROOMS: Classroom[] = [
 
 export default function ClassroomsPage() {
   const router = useRouter();
-  const { user, token } = useStore();
+  const { user, token, hasHydrated } = useStore();
 
   const [classrooms, setClassrooms] = useState<Classroom[]>(DEMO_CLASSROOMS);
   const [creating, setCreating] = useState(false);
@@ -65,8 +65,8 @@ export default function ClassroomsPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!token) router.push("/login");
-  }, [token, router]);
+    if (hasHydrated && !token) router.push("/login");
+  }, [hasHydrated, token, router]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,7 +99,7 @@ export default function ClassroomsPage() {
     }
   };
 
-  if (!user) return null;
+  if (!hasHydrated || !user) return null;
 
   const isTeacher = user.role === "teacher";
 

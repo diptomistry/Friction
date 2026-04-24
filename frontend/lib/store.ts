@@ -20,12 +20,14 @@ interface Mark {
 }
 
 interface AppState {
+  hasHydrated: boolean;
   token: string | null;
   user: UserProfile | null;
   classrooms: Classroom[];
   marks: Mark[];
 
   setToken: (token: string) => void;
+  setHasHydrated: (value: boolean) => void;
   setUser: (user: UserProfile) => void;
   setClassrooms: (classrooms: Classroom[]) => void;
   setMarks: (marks: Mark[]) => void;
@@ -35,6 +37,7 @@ interface AppState {
 export const useStore = create<AppState>()(
   persist(
     (set) => ({
+      hasHydrated: false,
       token: null,
       user: null,
       classrooms: [],
@@ -47,6 +50,8 @@ export const useStore = create<AppState>()(
         set({ token });
       },
 
+      setHasHydrated: (value) => set({ hasHydrated: value }),
+
       setUser: (user) => set({ user }),
 
       setClassrooms: (classrooms) => set({ classrooms }),
@@ -57,12 +62,21 @@ export const useStore = create<AppState>()(
         if (typeof window !== "undefined") {
           localStorage.removeItem("friction_token");
         }
-        set({ token: null, user: null, classrooms: [], marks: [] });
+        set({
+          token: null,
+          user: null,
+          classrooms: [],
+          marks: [],
+          hasHydrated: true,
+        });
       },
     }),
     {
       name: "friction-store",
       partialize: (state) => ({ token: state.token, user: state.user }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

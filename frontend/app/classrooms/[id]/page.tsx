@@ -165,7 +165,7 @@ function MarksCell({
 export default function ClassroomDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { user, token } = useStore();
+  const { user, token, hasHydrated } = useStore();
 
   const [students, setStudents] = useState<Student[]>(DEMO_STUDENTS);
   const [enrollEmail, setEnrollEmail] = useState("");
@@ -180,8 +180,8 @@ export default function ClassroomDetailPage() {
   const isTeacher = user?.role === "teacher";
 
   useEffect(() => {
-    if (!token) router.push("/login");
-  }, [token, router]);
+    if (hasHydrated && !token) router.push("/login");
+  }, [hasHydrated, token, router]);
 
   const handleEnroll = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,7 +206,7 @@ export default function ClassroomDetailPage() {
     );
   };
 
-  if (!user) return null;
+  if (!hasHydrated || !user) return null;
 
   const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 

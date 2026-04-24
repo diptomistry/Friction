@@ -18,19 +18,27 @@ Interactive docs: `http://localhost:8000/docs`
    - [POST /api/auth/logout](#post-apiauthlogout)
    - [GET /api/auth/me](#get-apiauthme)
    - [DELETE /api/auth/me](#delete-apiauthme)
-2. [Marks — Insecure](#2-marks--insecure)
+2. [Admin Endpoints](#2-admin-endpoints)
+   - [GET /api/admin/users](#get-apiadminusers)
+   - [GET /api/admin/users/{user_id}](#get-apiadminusersuser_id)
+   - [PATCH /api/admin/users/{user_id}](#patch-apiadminusersuser_id)
+   - [DELETE /api/admin/users/{user_id}](#delete-apiadminusersuser_id)
+3. [Marks Endpoints (Role-based)](#3-marks-endpoints-role-based)
+   - [GET /api/marks](#get-apimarks)
+   - [PUT /api/marks/update](#put-apimarksupdate)
+4. [Marks — Insecure](#4-marks--insecure)
    - [PUT /api/insecure/marks/update](#put-apiinsecuremarksupdate)
-3. [Marks — Secure](#3-marks--secure)
+5. [Marks — Secure](#5-marks--secure)
    - [PUT /api/secure/marks/update](#put-apisecuremarksupdate)
-4. [File Upload — Insecure](#4-file-upload--insecure)
+6. [File Upload — Insecure](#6-file-upload--insecure)
    - [GET /api/insecure/upload-url](#get-apiinsecureupload-url)
    - [GET /api/insecure/file-url](#get-apiinsecurefile-url)
-5. [File Upload — Secure](#5-file-upload--secure)
+7. [File Upload — Secure](#7-file-upload--secure)
    - [GET /api/secure/upload-url](#get-apisecureupload-url)
    - [GET /api/secure/file-url](#get-apisecurefile-url)
-6. [Friction Comparison Table](#6-friction-comparison-table)
-7. [JWT Payload Reference](#7-jwt-payload-reference)
-8. [Error Reference](#8-error-reference)
+8. [Friction Comparison Table](#8-friction-comparison-table)
+9. [JWT Payload Reference](#9-jwt-payload-reference)
+10. [Error Reference](#10-error-reference)
 
 ---
 
@@ -162,33 +170,145 @@ Returns the currently authenticated user's profile.
 
 ### DELETE /api/auth/me
 
-Soft-deletes the authenticated user's account (`is_active = false`).
+Hard-deletes the authenticated user's account (removes row from `users` and related rows).
 
 **Auth:** `Bearer <token>` required  
 **Query param:** `?mode=secure` (default) or `?mode=insecure`
 
 | Mode | Behaviour |
 |------|-----------|
-| `insecure` | **NO FRICTION (VULNERABLE)** — marks user inactive but **does not revoke the token**. The deleted user's JWT still works on insecure endpoints. |
-| `secure` | **WITH FRICTION (SECURE)** — marks user inactive **and** blacklists the token immediately. |
+| `insecure` | **NO FRICTION (VULNERABLE)** — permanently deletes account data but **does not revoke the current token** (`jti` is not blacklisted). |
+| `secure` | **WITH FRICTION (SECURE)** — permanently deletes account data **and** blacklists the current token immediately. |
 
 **Response `200 OK` — insecure**
 ```json
 {
-  "detail": "Account deleted (token still valid — insecure mode)"
+  "detail": "Account deleted permanently (token not revoked — insecure mode)"
 }
 ```
 
 **Response `200 OK` — secure**
 ```json
 {
-  "detail": "Account deleted and token revoked immediately"
+  "detail": "Account deleted permanently and token revoked immediately"
 }
 ```
 
 ---
 
-## 2. Marks — Insecure
+## 2. Admin Endpoints
+
+All admin endpoints are protected by secure auth + role check:
+- must present valid bearer token
+- token must not be blacklisted
+- user must be active
+- user role must be `admin`
+
+### GET /api/admin/users
+
+List all users.
+
+**Auth:** `Bearer <admin-token>` required
+
+**Response `200 OK`**
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "alice@example.com",
+    "role": "student",
+    "is_active": true,
+    "created_at": "2026-04-24T10:00:00"
+  }
+]
+```
+
+### GET /api/admin/users/{user_id}
+
+Get one user by id.
+
+**Auth:** `Bearer <admin-token>` required
+
+### PATCH /api/admin/users/{user_id}
+
+Update a user's role and/or active status.
+
+**Auth:** `Bearer <admin-token>` required
+
+**Request body**
+```json
+{
+  "role": "teacher",
+  "is_active": true
+}
+```
+
+Both fields are optional; include only what you want to change.
+
+### DELETE /api/admin/users/{user_id}
+
+Hard delete a user account and related records.
+
+**Auth:** `Bearer <admin-token>` required
+
+**Response `200 OK`**
+```json
+{
+  "detail": "User deleted successfully"
+}
+```
+
+---
+
+## 3. Marks Endpoints (Role-based)
+
+### GET /api/marks
+
+Role-based mark listing endpoint.
+
+**Auth:** `Bearer <token>` required (secure auth)
+
+Behavior:
+- `student` → returns only marks where `student_id = current_user.id`
+- `teacher` → returns all marks from classrooms owned by the teacher
+- `admin` → returns all marks
+
+**Response `200 OK`**
+```json
+[
+  {
+    "id": "01f9...",
+    "student_id": "550e8400-e29b-41d4-a716-446655440000",
+    "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    "marks": 95,
+    "updated_at": "2026-04-24T10:05:00"
+  }
+]
+```
+
+### PUT /api/marks/update
+
+Teacher edit/upsert endpoint.
+
+**Auth:** `Bearer <token>` required (secure auth)  
+**Role:** `teacher` only
+
+**Request body**
+```json
+{
+  "student_id": "550e8400-e29b-41d4-a716-446655440000",
+  "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "marks": 87
+}
+```
+
+Validation:
+- teacher must own classroom
+- student must be enrolled in classroom
+
+---
+
+## 4. Marks — Insecure
 
 ### PUT /api/insecure/marks/update
 
@@ -223,7 +343,7 @@ Soft-deletes the authenticated user's account (`is_active = false`).
 
 ---
 
-## 3. Marks — Secure
+## 5. Marks — Secure
 
 ### PUT /api/secure/marks/update
 
@@ -268,7 +388,7 @@ Soft-deletes the authenticated user's account (`is_active = false`).
 
 ---
 
-## 4. File Upload — Insecure
+## 6. File Upload — Insecure
 
 ### GET /api/insecure/upload-url
 
@@ -328,7 +448,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 5. File Upload — Secure
+## 7. File Upload — Secure
 
 ### GET /api/secure/upload-url
 
@@ -405,13 +525,13 @@ Authorization: Bearer <token>
 
 ---
 
-## 6. Friction Comparison Table
+## 8. Friction Comparison Table
 
 | Feature | `/insecure/` | `/secure/` |
 |---------|-------------|------------|
 | **Auth dependency** | Decodes JWT only | Blacklist check + `is_active` check |
 | **Logout** | No-op — token lives 7 days | `jti` inserted to `token_blacklist` immediately |
-| **Delete account** | Token stays valid | Token blacklisted on delete |
+| **Delete account** | Hard delete, token not revoked | Hard delete + token blacklisted |
 | **Marks — role** | Any authenticated user | `teacher` only |
 | **Marks — ownership** | Not checked | Teacher must own classroom |
 | **Marks — enrollment** | Not checked | Student must be in classroom |
@@ -423,7 +543,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 7. JWT Payload Reference
+## 9. JWT Payload Reference
 
 ```json
 {
@@ -443,7 +563,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 8. Error Reference
+## 10. Error Reference
 
 All error responses follow FastAPI's standard shape:
 
