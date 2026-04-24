@@ -1,26 +1,30 @@
 """
-NO FRICTION (VULNERABLE) — File upload and access endpoints.
+NO FRICTION (VULNERABLE) — legacy file storage system.
 
-GET /api/insecure/upload-url?key=<user_input>
-GET /api/insecure/file-url?key=<user_input>
+POST /api/insecure/files/upload-url
+POST /api/insecure/files/confirm
+Download is unified at: GET /api/files/{file_id}?mode=insecure
 
-Vulnerabilities demonstrated:
-  1. User controls the S3 key — path traversal / overwrite any object.
-  2. Pre-signed URL valid for 7 days.
-  3. No content-type or size restrictions enforced.
-  4. file-url signs any arbitrary key — no ownership check.
+Vulnerability focus:
+  - User controls storage key (overwrite / predictability risk).
+  - No ownership check on download access (handled by unified endpoint).
+
+Global rule still enforced:
+  - Download schedule rule is enforced by unified endpoint.
 """
 
 import boto3
 from botocore.config import Config
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import get_db
 from app.dependencies import get_current_user_insecure
-from app.models import User
-from app.schemas import FileUrlResponse, UploadUrlResponse
+from app.models import File, User
+from app.schemas import InsecureFileConfirmRequest, InsecureFileUploadUrlRequest, UploadUrlResponse
 
-router = APIRouter(prefix="/api/insecure", tags=["insecure-files"])
+router = APIRouter(prefix="/api/insecure/files", tags=["insecure-files"])
 
 # 7-day expiry — NO FRICTION (VULNERABLE)
 _INSECURE_EXPIRY = 7 * 24 * 3600
@@ -36,9 +40,9 @@ def _get_s3_client():
     )
 
 
-@router.get("/upload-url", response_model=UploadUrlResponse)
+@router.post("/upload-url", response_model=UploadUrlResponse)
 async def get_insecure_upload_url(
-    key: str = Query(..., description="User-supplied S3 key — no sanitisation"),
+    body: InsecureFileUploadUrlRequest,
     # NO FRICTION (VULNERABLE): insecure auth — blacklisted tokens accepted
     current_user: User = Depends(get_current_user_insecure),
 ):
@@ -54,35 +58,37 @@ async def get_insecure_upload_url(
     # NO FRICTION (VULNERABLE): sign whatever key the user provides
     upload_url = s3.generate_presigned_url(
         "put_object",
-        Params={"Bucket": settings.R2_BUCKET_NAME, "Key": key},
+        Params={"Bucket": settings.R2_BUCKET_NAME, "Key": body.key},
         ExpiresIn=_INSECURE_EXPIRY,
     )
 
     return UploadUrlResponse(
         upload_url=upload_url,
-        key=key,
+        key=body.key,
         expires_in=_INSECURE_EXPIRY,
     )
 
 
-@router.get("/file-url", response_model=FileUrlResponse)
-async def get_insecure_file_url(
-    key: str = Query(..., description="Any S3 key — no ownership check"),
-    # NO FRICTION (VULNERABLE): insecure auth
+@router.post("/confirm")
+async def confirm_insecure_upload(
+    body: InsecureFileConfirmRequest,
     current_user: User = Depends(get_current_user_insecure),
+    db: AsyncSession = Depends(get_db),
 ):
     """
-    NO FRICTION (VULNERABLE):
-    - No ownership check — any authenticated user can access any object.
-    - key is user-controlled → read any object in the bucket.
+    Legacy confirm:
+    - Stores user-provided key directly in DB.
     """
-    s3 = _get_s3_client()
-
-    # NO FRICTION (VULNERABLE): sign any key, no ownership validation
-    download_url = s3.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.R2_BUCKET_NAME, "Key": key},
-        ExpiresIn=_INSECURE_EXPIRY,
+    file_record = File(
+        owner_id=current_user.id,
+        classroom_id=body.classroom_id,
+        temp_key=body.key,
+        final_key=body.key,
+        status="scheduled",
     )
+    db.add(file_record)
+    await db.commit()
+    await db.refresh(file_record)
+    return {"detail": "Upload confirmed", "file_id": str(file_record.file_id)}
 
-    return FileUrlResponse(download_url=download_url, expires_in=_INSECURE_EXPIRY)
+

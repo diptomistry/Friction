@@ -42,11 +42,11 @@ const navByRole = {
   student: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/classrooms", label: "Classrooms", icon: BookOpen },
-    { href: "/uploads", label: "Uploads", icon: Upload },
   ],
   teacher: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/classrooms", label: "Classrooms", icon: BookOpen },
+    { href: "/uploads", label: "Uploads", icon: Upload },
   ],
   admin: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },

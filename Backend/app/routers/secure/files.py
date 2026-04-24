@@ -1,41 +1,41 @@
 """
 WITH FRICTION (SECURE) — File upload and access endpoints.
 
-GET /api/secure/upload-url
-GET /api/secure/file-url?session_id=<uuid>
+POST /api/secure/files/upload-request
+POST /api/secure/files/upload-confirm
+Schedule is unified at: POST /api/files/schedule
+Download is unified at: GET /api/files/{file_id}?mode=secure
 
 Friction layers applied:
-  1. Server-generated key — user cannot control the path.
-  2. Short-lived pre-signed URL (300 seconds).
-  3. Content-type locked to application/pdf.
-  4. Max 5 MB enforced via Conditions in pre-signed POST.
-  5. Upload session stored in DB for ownership tracking.
-  6. file-url validates session ownership and expiry.
-  7. Teachers can access files from their own classrooms.
+  1. Backend-generated file_id and storage key.
+  2. Short-lived upload URL (300 seconds).
+  3. Schedule-based visibility via file_schedules.
+  4. Access checks before issuing download URL (handled by unified endpoint).
 """
 
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
 
 import boto3
 from botocore.config import Config
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user_secure
-from app.models import Classroom, ClassroomStudent, UploadSession, User
-from app.schemas import FileUrlResponse, SecureUploadUrlResponse
+from app.models import Classroom, File, User
+from app.schemas import (
+    FileUploadRequestResponse,
+    SecureFileUploadConfirmRequest,
+    SecureFileUploadRequest,
+)
 
-router = APIRouter(prefix="/api/secure", tags=["secure-files"])
+router = APIRouter(prefix="/api/secure/files", tags=["secure-files"])
 
 # WITH FRICTION (SECURE): short expiry
 _SECURE_EXPIRY = 300  # 5 minutes
-_MAX_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
-_ALLOWED_CONTENT_TYPE = "application/pdf"
 
 
 def _get_s3_client():
@@ -48,119 +48,72 @@ def _get_s3_client():
     )
 
 
-@router.get("/upload-url", response_model=SecureUploadUrlResponse)
-async def get_secure_upload_url(
-    classroom_id: Optional[uuid.UUID] = Query(default=None),
-    # WITH FRICTION (SECURE): secure auth dependency
+@router.post("/upload-request", response_model=FileUploadRequestResponse)
+async def upload_request_secure(
+    body: SecureFileUploadRequest,
     current_user: User = Depends(get_current_user_secure),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    WITH FRICTION (SECURE):
-    - Server generates a fixed-format key → no path traversal.
-    - Expiry: 300 seconds.
-    - Content-type enforced to application/pdf.
-    - Max 5 MB via presigned POST conditions.
-    - Upload session recorded in DB for later ownership validation.
-    """
+    if body.file_type.lower() != "pdf":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pdf is allowed")
 
-    # Friction point 1: server-controlled key — user cannot influence the path
+    classroom = (
+        await db.execute(select(Classroom).where(Classroom.id == body.classroom_id))
+    ).scalar_one_or_none()
+    if not classroom:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Classroom not found")
+    if current_user.role == "teacher" and classroom.teacher_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this classroom")
+
+    file_id = uuid.uuid4()
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
-    file_uuid = str(uuid.uuid4())
-    key = f"submissions/{current_user.id}/{file_uuid}/{timestamp}.pdf"
-
-    expires_at = datetime.utcnow() + timedelta(seconds=_SECURE_EXPIRY)
+    key = f"submissions/{current_user.id}/{file_id}/{timestamp}.pdf"
 
     s3 = _get_s3_client()
-
-    # Friction point 2: presigned POST with conditions (size + content-type)
-    presigned = s3.generate_presigned_post(
-        Bucket=settings.R2_BUCKET_NAME,
-        Key=key,
-        Fields={"Content-Type": _ALLOWED_CONTENT_TYPE},
-        Conditions=[
-            {"Content-Type": _ALLOWED_CONTENT_TYPE},          # lock content-type
-            ["content-length-range", 1, _MAX_SIZE_BYTES],     # max 5 MB
-        ],
+    upload_url = s3.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": settings.R2_BUCKET_NAME, "Key": key, "ContentType": "application/pdf"},
         ExpiresIn=_SECURE_EXPIRY,
     )
 
-    # Friction point 3: persist session for ownership validation at download time
-    session = UploadSession(
-        user_id=current_user.id,
-        file_key=key,
-        classroom_id=classroom_id,
-        expires_at=expires_at,
+    file_record = File(
+        file_id=file_id,
+        owner_id=current_user.id,
+        classroom_id=body.classroom_id,
+        temp_key=key,
+        status="draft",
     )
-    db.add(session)
+    db.add(file_record)
     await db.commit()
-    await db.refresh(session)
+    await db.refresh(file_record)
 
-    return SecureUploadUrlResponse(
-        upload_url=presigned["url"],
+    return FileUploadRequestResponse(
+        file_id=file_record.file_id,
+        upload_url=upload_url,
         key=key,
-        session_id=session.id,
         expires_in=_SECURE_EXPIRY,
     )
 
 
-@router.get("/file-url", response_model=FileUrlResponse)
-async def get_secure_file_url(
-    session_id: uuid.UUID = Query(...),
-    # WITH FRICTION (SECURE): secure auth dependency
+@router.post("/upload-confirm")
+async def upload_confirm_secure(
+    body: SecureFileUploadConfirmRequest,
     current_user: User = Depends(get_current_user_secure),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    WITH FRICTION (SECURE):
-    - Looks up upload session by session_id.
-    - Validates session expiry.
-    - Validates ownership: requester must be the uploader OR a teacher who owns the
-      classroom linked to the session.
-    - Signs a short-lived (300 s) URL — not an arbitrary key.
-    """
-
-    # Friction point 1: session must exist
-    result = await db.execute(
-        select(UploadSession).where(UploadSession.id == session_id)
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload session not found")
-
-    # Friction point 2: session expiry check
-    if session.expires_at < datetime.utcnow():
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE,
-            detail="Upload session has expired",
-        )
-
-    # Friction point 3: ownership check
-    is_owner = session.user_id == current_user.id
-
-    is_classroom_teacher = False
-    if not is_owner and current_user.role == "teacher" and session.classroom_id:
-        classroom_result = await db.execute(
-            select(Classroom).where(
-                Classroom.id == session.classroom_id,
-                Classroom.teacher_id == current_user.id,
-            )
-        )
-        is_classroom_teacher = classroom_result.scalar_one_or_none() is not None
-
-    if not is_owner and not is_classroom_teacher:
+    file_record = (
+        await db.execute(select(File).where(File.file_id == body.file_id))
+    ).scalar_one_or_none()
+    if not file_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    if file_record.owner_id != current_user.id and current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this file",
+            detail="You do not own this file",
         )
+    file_record.final_key = file_record.temp_key
+    file_record.status = "draft"
+    await db.commit()
+    return {"detail": "Upload confirmed", "file_id": str(file_record.file_id)}
 
-    s3 = _get_s3_client()
 
-    # Friction point 4: short-lived URL, key comes from DB — not user input
-    download_url = s3.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.R2_BUCKET_NAME, "Key": session.file_key},
-        ExpiresIn=_SECURE_EXPIRY,
-    )
-
-    return FileUrlResponse(download_url=download_url, expires_in=_SECURE_EXPIRY)

@@ -25,7 +25,7 @@ class User(Base):
 
     classrooms: Mapped[list["Classroom"]] = relationship(back_populates="teacher")
     blacklisted_tokens: Mapped[list["TokenBlacklist"]] = relationship(back_populates="user")
-    upload_sessions: Mapped[list["UploadSession"]] = relationship(back_populates="user")
+    files: Mapped[list["File"]] = relationship(back_populates="owner")
 
 
 class Classroom(Base):
@@ -78,14 +78,52 @@ class TokenBlacklist(Base):
     user: Mapped["User"] = relationship(back_populates="blacklisted_tokens")
 
 
-class UploadSession(Base):
-    __tablename__ = "upload_sessions"
+class File(Base):
+    __tablename__ = "files"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
-    file_key: Mapped[str] = mapped_column(Text, nullable=False)
-    classroom_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    file_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+    owner_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    classroom_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("classrooms.id"),
+        nullable=True,
+    )
+    temp_key: Mapped[str] = mapped_column(Text, nullable=False)
+    final_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        CheckConstraint("status IN ('draft','scheduled','published','expired')"),
+        default="draft",
+    )
+    publish_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    user: Mapped["User"] = relationship(back_populates="upload_sessions")
+    owner: Mapped[Optional["User"]] = relationship(back_populates="files")
+
+
+class FileSchedule(Base):
+    __tablename__ = "file_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    file_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("files.file_id"))
+    classroom_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("classrooms.id"),
+        nullable=True,
+    )
+    publish_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class FileAccessLog(Base):
+    __tablename__ = "file_access_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    file_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("files.file_id"))
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+    accessed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_role
-from app.models import Classroom, ClassroomStudent, Mark, TokenBlacklist, UploadSession, User
+from app.models import Classroom, ClassroomStudent, Mark, TokenBlacklist, User
 from app.schemas import AdminUserUpdateRequest, UserOut
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -87,14 +87,10 @@ async def delete_user(
             delete(ClassroomStudent).where(ClassroomStudent.classroom_id.in_(taught_classroom_ids))
         )
         await db.execute(delete(Mark).where(Mark.classroom_id.in_(taught_classroom_ids)))
-        await db.execute(
-            delete(UploadSession).where(UploadSession.classroom_id.in_(taught_classroom_ids))
-        )
         await db.execute(delete(Classroom).where(Classroom.id.in_(taught_classroom_ids)))
 
     await db.execute(delete(ClassroomStudent).where(ClassroomStudent.student_id == user.id))
     await db.execute(delete(Mark).where(Mark.student_id == user.id))
-    await db.execute(delete(UploadSession).where(UploadSession.user_id == user.id))
     await db.execute(delete(TokenBlacklist).where(TokenBlacklist.user_id == user.id))
     await db.delete(user)
     await db.commit()

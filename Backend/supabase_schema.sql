@@ -39,13 +39,49 @@ create table token_blacklist (
   jti text not null,
   expires_at timestamp not null
 );
-
--- UPLOAD SESSIONS
-create table upload_sessions (
+create table files (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references users(id),
-  file_key text not null,
-  classroom_id uuid,
-  expires_at timestamp not null,
+
+  owner_id uuid references users(id) on delete cascade,
+  classroom_id uuid references classrooms(id) on delete cascade,
+
+  file_id uuid unique not null, -- public-safe ID (NEVER expose storage path)
+
+  temp_key text not null,
+  final_key text,
+
+  status text check (
+    status in ('draft','scheduled','published','expired')
+  ) default 'draft',
+  publish_at timestamp,
+
   created_at timestamp default now()
 );
+
+create table file_schedules (
+  id uuid primary key default gen_random_uuid(),
+
+  file_id uuid references files(file_id) on delete cascade,
+  classroom_id uuid references classrooms(id) on delete cascade,
+
+  publish_at timestamp not null,
+
+  created_at timestamp default now()
+);
+
+create table file_access_logs (
+  id uuid primary key default gen_random_uuid(),
+
+  file_id uuid references files(file_id) on delete cascade,
+  user_id uuid references users(id) on delete cascade,
+
+  accessed_at timestamp default now()
+);
+
+alter table file_schedules
+  alter column publish_at type timestamptz
+  using publish_at at time zone 'UTC';
+
+alter table files
+  alter column publish_at type timestamptz
+  using publish_at at time zone 'UTC';

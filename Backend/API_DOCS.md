@@ -8,6 +8,25 @@
 Base URL: `http://localhost:8000`  
 Interactive docs: `http://localhost:8000/docs`
 
+## File API Update (Final Architecture)
+
+The file-system endpoints were upgraded to the new architecture.  
+Use the routes below (they supersede older `/api/insecure/upload-url` and `/api/secure/upload-url` style routes):
+
+- Insecure:
+  - `POST /api/insecure/files/upload-url`
+  - `POST /api/insecure/files/confirm`
+- Secure:
+  - `POST /api/secure/files/upload-request`
+  - `POST /api/secure/files/upload-confirm`
+- Shared file endpoints:
+  - `POST /api/files/schedule`
+  - `GET /api/files/{file_id}?mode=secure|insecure`
+  - `GET /api/files/classroom/{classroom_id}`
+
+Global visibility rule:
+- Both insecure and secure downloads enforce schedule (`file_schedules.publish_at` must be reached).
+
 ---
 
 ## Table of Contents
@@ -37,14 +56,18 @@ Interactive docs: `http://localhost:8000/docs`
 6. [Marks — Secure](#6-marks--secure)
    - [PUT /api/secure/marks/update](#put-apisecuremarksupdate)
 7. [File Upload — Insecure](#7-file-upload--insecure)
-   - [GET /api/insecure/upload-url](#get-apiinsecureupload-url)
-   - [GET /api/insecure/file-url](#get-apiinsecurefile-url)
-8. [File Upload — Secure](#8-file-upload--secure)
-   - [GET /api/secure/upload-url](#get-apisecureupload-url)
-   - [GET /api/secure/file-url](#get-apisecurefile-url)
-9. [Friction Comparison Table](#9-friction-comparison-table)
-10. [JWT Payload Reference](#10-jwt-payload-reference)
-11. [Error Reference](#11-error-reference)
+   - [POST /api/insecure/files/upload-url](#post-apiinsecurefilesupload-url)
+   - [POST /api/insecure/files/confirm](#post-apiinsecurefilesconfirm)
+8. [Shared File Endpoints](#8-shared-file-endpoints)
+   - [POST /api/files/schedule](#post-apifilesschedule)
+   - [GET /api/files/{file_id}](#get-apifilesfile_id)
+   - [GET /api/files/classroom/{classroom_id}](#get-apifilesclassroomclassroom_id)
+9. [File Upload — Secure](#9-file-upload--secure)
+   - [POST /api/secure/files/upload-request](#post-apisecurefilesupload-request)
+   - [POST /api/secure/files/upload-confirm](#post-apisecurefilesupload-confirm)
+10. [Friction Comparison Table](#10-friction-comparison-table)
+11. [JWT Payload Reference](#11-jwt-payload-reference)
+12. [Error Reference](#12-error-reference)
 
 ---
 
@@ -456,12 +479,12 @@ Validation:
 
 ## 7. File Upload — Insecure
 
-### GET /api/insecure/upload-url
+### POST /api/insecure/files/upload-url
 
 > **NO FRICTION (VULNERABLE)**
 
 **Auth:** `Bearer <token>` required (insecure)  
-**Query param:** `?key=<any-string>`
+**Body:** `{ "key": "<any-string>" }`
 
 **Vulnerabilities:**
 - User fully controls the S3 key → path traversal, file overwrite.
@@ -471,8 +494,9 @@ Validation:
 
 **Example request**
 ```
-GET /api/insecure/upload-url?key=../../admin/config.json
+POST /api/insecure/files/upload-url
 Authorization: Bearer <token>
+Body: {"key":"exams/midterm.pdf"}
 ```
 
 **Response `200 OK`**
@@ -486,112 +510,129 @@ Authorization: Bearer <token>
 
 ---
 
-### GET /api/insecure/file-url
+### POST /api/insecure/files/confirm
 
-> **NO FRICTION (VULNERABLE)**
+Store uploaded file metadata using the user-controlled key.
 
-**Auth:** `Bearer <token>` required (insecure)  
-**Query param:** `?key=<any-string>`
+**Auth:** `Bearer <token>` required (insecure)
 
-**Vulnerabilities:**
-- No ownership check — any authenticated user can access any object.
-- User-controlled key → read arbitrary objects in the bucket.
-- URL valid for **7 days**.
-
-**Example request**
-```
-GET /api/insecure/file-url?key=submissions/other-user-id/secret.pdf
-Authorization: Bearer <token>
+**Request body**
+```json
+{
+  "key": "exams/midterm.pdf",
+  "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+}
 ```
 
 **Response `200 OK`**
 ```json
 {
-  "download_url": "https://<r2-endpoint>/bucket/submissions/other-user-id/secret.pdf?X-Amz-...",
-  "expires_in": 604800
+  "detail": "Upload confirmed",
+  "file_id": "<uuid>"
 }
 ```
 
+## 8. Shared File Endpoints
+
+### POST /api/files/schedule
+
+Schedule file visibility (general endpoint).
+
+**Auth:** `Bearer <token>` required (secure auth)  
+**Role:** `teacher` (owner classroom) or `admin`
+
+**Request body**
+```json
+{
+  "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "publish_at": "2026-04-24T15:00:00"
+}
+```
+
+### GET /api/files/{file_id}
+
+Unified file download endpoint.
+
+**Auth:** `Bearer <token>` required  
+**Query:** `?mode=secure|insecure` (default: `secure`)
+
+Behavior:
+- Always enforces schedule visibility (`publish_at <= now`)
+- `secure` mode: role/access checks, short expiry (300s)
+- `insecure` mode: no ownership checks, long expiry (7 days)
+
+### GET /api/files/classroom/{classroom_id}
+
+List classroom files for feed/profile screens.
+
+**Auth:** `Bearer <token>` required (secure auth)
+
+Behavior:
+- `admin`: any classroom
+- `teacher`: own classroom only
+- `student`: only enrolled classroom
+- visibility:
+  - `teacher` / `admin`: all classroom files (including future scheduled)
+  - `student`: only currently visible files (`publish_at <= now`)
+
+Each list item includes:
+- `file_id`
+- `filename` (derived from final key / temp key basename)
+- `status`
+- `publish_at`
+- `created_at`
+
 ---
 
-## 8. File Upload — Secure
+## 9. File Upload — Secure
 
-### GET /api/secure/upload-url
+### POST /api/secure/files/upload-request
 
 > **WITH FRICTION (SECURE)**
 
 **Auth:** `Bearer <token>` required (secure)  
-**Query param:** `?classroom_id=<uuid>` *(optional)*
+**Body:**
+```json
+{
+  "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "file_type": "pdf"
+}
+```
 
 **Friction layers:**
-1. Server generates the key — user cannot influence the path:  
-   `submissions/{user_id}/{uuid}/{timestamp}.pdf`
-2. Pre-signed URL expires in **300 seconds** (5 minutes).
-3. Content-type locked to `application/pdf`.
-4. Upload size capped at **5 MB** via presigned POST conditions.
-5. Upload session recorded in `upload_sessions` table for future ownership validation.
+1. Backend generates `file_id`.
+2. Backend generates temp storage key.
+3. Client cannot choose final object identity.
+4. Short-lived upload URL (300 seconds).
 
 **Example request**
 ```
-GET /api/secure/upload-url?classroom_id=6ba7b810-9dad-11d1-80b4-00c04fd430c8
+POST /api/secure/files/upload-request
 Authorization: Bearer <token>
 ```
 
 **Response `200 OK`**
 ```json
 {
-  "upload_url": "https://<r2-endpoint>/bucket",
-  "key": "submissions/550e8400.../a1b2c3d4.../20260424T100500.pdf",
-  "session_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "upload_url": "https://<r2-endpoint>/bucket/submissions/...",
+  "key": "submissions/<owner>/<file_id>/<timestamp>.pdf",
   "expires_in": 300
 }
 ```
 
-> **Note:** The `upload_url` from this endpoint is a **presigned POST** URL. You must `POST` a multipart form to it (not a `PUT`), including the fields returned by the R2/S3 SDK. Include `Content-Type: application/pdf` and keep the body under 5 MB.
+### POST /api/secure/files/upload-confirm
 
----
+Confirm upload completion and bind uploaded object to the `file_id`.
 
-### GET /api/secure/file-url
-
-> **WITH FRICTION (SECURE)**
-
-**Auth:** `Bearer <token>` required (secure)  
-**Query param:** `?session_id=<uuid>`
-
-**Friction layers:**
-1. Resolves key from DB via `session_id` — user cannot specify an arbitrary key.
-2. Session expiry is checked — expired sessions return `410 Gone`.
-3. Ownership enforced:
-   - Requester is the original uploader, **OR**
-   - Requester is a `teacher` who owns the classroom linked to the session.
-4. Generated URL expires in **300 seconds**.
-
-**Example request**
-```
-GET /api/secure/file-url?session_id=f47ac10b-58cc-4372-a567-0e02b2c3d479
-Authorization: Bearer <token>
-```
-
-**Response `200 OK`**
+**Request body**
 ```json
 {
-  "download_url": "https://<r2-endpoint>/bucket/submissions/...?X-Amz-...",
-  "expires_in": 300
+  "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
 }
 ```
 
-**Errors**
-
-| Status | Detail |
-|--------|--------|
-| `401` | `Token has been revoked` |
-| `404` | `Upload session not found` |
-| `410` | `Upload session has expired` |
-| `403` | `You do not have access to this file` |
-
----
-
-## 9. Friction Comparison Table
+## 10. Friction Comparison Table
 
 | Feature | `/insecure/` | `/secure/` |
 |---------|-------------|------------|
@@ -601,15 +642,14 @@ Authorization: Bearer <token>
 | **Marks — role** | Any authenticated user | `teacher` only |
 | **Marks — ownership** | Not checked | Teacher must own classroom |
 | **Marks — enrollment** | Not checked | Student must be in classroom |
-| **Upload key** | User-controlled (path traversal) | Server-generated, scoped to `user_id` |
+| **Upload key** | User-controlled (overwrite risk) | Backend-generated from `file_id` |
 | **Upload expiry** | 7 days (604 800 s) | 300 s (5 minutes) |
-| **Upload content-type** | Unrestricted | Locked to `application/pdf` |
-| **Upload size** | Unrestricted | Max 5 MB |
-| **File access** | Sign any arbitrary key | Ownership + session expiry validated |
+| **Scheduling check** | Enforced globally on download | Enforced globally on download |
+| **File access** | Unified `/api/files/{file_id}?mode=insecure`, no ownership checks | Unified `/api/files/{file_id}?mode=secure`, role/access validation |
 
 ---
 
-## 10. JWT Payload Reference
+## 11. JWT Payload Reference
 
 ```json
 {
@@ -629,7 +669,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 11. Error Reference
+## 12. Error Reference
 
 All error responses follow FastAPI's standard shape:
 
@@ -645,6 +685,6 @@ All error responses follow FastAPI's standard shape:
 | `401` | Unauthenticated — missing, invalid, expired, or revoked token |
 | `403` | Forbidden — authenticated but insufficient role or ownership |
 | `404` | Resource not found |
-| `410` | Gone — resource existed but has expired (upload session) |
+| `410` | Gone — resource existed but has expired (legacy/other flows) |
 | `422` | Unprocessable entity — request body failed Pydantic validation |
 | `500` | Internal server error |

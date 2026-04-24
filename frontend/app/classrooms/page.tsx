@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import AppSidebarLayout from "@/components/AppSidebarLayout";
+import ApiLoadingState from "@/components/ApiLoadingState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -177,11 +178,7 @@ export default function ClassroomsPage() {
 
         {/* Classroom list */}
         <div className="space-y-3">
-          {loadingClassrooms && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-sm text-slate-500">
-              Loading classrooms...
-            </div>
-          )}
+          {loadingClassrooms && <ApiLoadingState message="Loading classrooms..." />}
           {classrooms.map((room) => (
             <Link
               key={room.id}

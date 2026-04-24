@@ -96,3 +96,42 @@ class SecureUploadUrlResponse(BaseModel):
 class FileUrlResponse(BaseModel):
     download_url: str
     expires_in: int
+
+
+class InsecureFileUploadUrlRequest(BaseModel):
+    key: str
+
+
+class InsecureFileConfirmRequest(BaseModel):
+    key: str
+    classroom_id: uuid.UUID
+
+
+class SecureFileUploadRequest(BaseModel):
+    classroom_id: uuid.UUID
+    file_type: str = "pdf"
+
+
+class SecureFileUploadConfirmRequest(BaseModel):
+    file_id: uuid.UUID
+
+
+class SecureFileScheduleRequest(BaseModel):
+    file_id: uuid.UUID
+    publish_at: datetime
+
+
+class FileUploadRequestResponse(BaseModel):
+    file_id: uuid.UUID
+    upload_url: str
+    key: str
+    expires_in: int
+
+
+class FileListItemResponse(BaseModel):
+    file_id: uuid.UUID
+    classroom_id: Optional[uuid.UUID]
+    status: str
+    publish_at: Optional[datetime]
+    created_at: datetime
+    filename: str

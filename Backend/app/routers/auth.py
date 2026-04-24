@@ -20,7 +20,7 @@ from app.auth.utils import (
     verify_password,
 )
 from app.database import get_db
-from app.models import Classroom, ClassroomStudent, Mark, TokenBlacklist, UploadSession, User
+from app.models import Classroom, ClassroomStudent, Mark, TokenBlacklist, User
 from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -185,15 +185,11 @@ async def delete_me(
             delete(ClassroomStudent).where(ClassroomStudent.classroom_id.in_(taught_classroom_ids))
         )
         await db.execute(delete(Mark).where(Mark.classroom_id.in_(taught_classroom_ids)))
-        await db.execute(
-            delete(UploadSession).where(UploadSession.classroom_id.in_(taught_classroom_ids))
-        )
         await db.execute(delete(Classroom).where(Classroom.id.in_(taught_classroom_ids)))
 
     # Remove records where the user is a student/uploader/token owner.
     await db.execute(delete(ClassroomStudent).where(ClassroomStudent.student_id == user.id))
     await db.execute(delete(Mark).where(Mark.student_id == user.id))
-    await db.execute(delete(UploadSession).where(UploadSession.user_id == user.id))
     await db.execute(delete(TokenBlacklist).where(TokenBlacklist.user_id == user.id))
 
     # Remove the user row itself.

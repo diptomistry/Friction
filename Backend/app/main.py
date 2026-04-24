@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import admin
 from app.routers import auth
 from app.routers import classrooms
+from app.routers import files
 from app.routers import marks
 from app.routers.insecure import files as insecure_files
 from app.routers.insecure import marks as insecure_marks
@@ -42,6 +43,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(classrooms.router)
+app.include_router(files.router)
 app.include_router(marks.router)
 app.include_router(insecure_marks.router)
 app.include_router(insecure_files.router)

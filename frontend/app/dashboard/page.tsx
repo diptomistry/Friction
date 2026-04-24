@@ -51,13 +51,17 @@ export default function DashboardPage() {
       href: "/classrooms",
       color: "violet",
     },
-    {
-      icon: Upload,
-      label: "Uploads",
-      value: "Files",
-      href: "/uploads",
-      color: "violet",
-    },
+    ...(user?.role === "teacher"
+      ? [
+          {
+            icon: Upload,
+            label: "Question Files",
+            value: "Upload",
+            href: "/uploads",
+            color: "violet",
+          },
+        ]
+      : []),
     {
       icon: UserCircle,
       label: "Role",

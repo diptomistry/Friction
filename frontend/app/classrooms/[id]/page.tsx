@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import AppSidebarLayout from "@/components/AppSidebarLayout";
+import ApiLoadingState from "@/components/ApiLoadingState";
 import ExploitHint from "@/components/ExploitHint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,11 +19,14 @@ import { toast } from "sonner";
 import {
   enrollStudent,
   getAllStudents,
+  getClassroomFiles,
   getClassrooms,
   getClassroomStudents,
+  getFileDownload,
   getMarks,
   type ClassroomStudent,
   type ClassroomRecord,
+  type ClassroomFileRecord,
   secureUpdateMarks,
   type MarkRecord,
 } from "@/lib/api";
@@ -41,6 +45,17 @@ interface Student {
   email: string;
   marks: number | null;
 }
+
+const formatCountdown = (targetMs: number, nowMs: number) => {
+  const diff = targetMs - nowMs;
+  if (diff <= 0) return "publishing now";
+  const totalSeconds = Math.floor(diff / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `publishes in ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
+};
 
 function MarksCell({
   student,
@@ -161,7 +176,11 @@ export default function ClassroomDetailPage() {
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [enrolling, setEnrolling] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(false);
+  const [loadingFiles, setLoadingFiles] = useState(false);
   const [classroomMeta, setClassroomMeta] = useState<ClassroomRecord | null>(null);
+  const [classroomFiles, setClassroomFiles] = useState<ClassroomFileRecord[]>([]);
+  const [openingFileId, setOpeningFileId] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const isTeacher = user?.role === "teacher";
 
@@ -244,6 +263,42 @@ export default function ClassroomDetailPage() {
     };
     void loadAllStudents();
   }, [hasHydrated, token, isTeacher]);
+
+  useEffect(() => {
+    if (!hasHydrated || !token || !user) return;
+    const loadClassroomFiles = async () => {
+      setLoadingFiles(true);
+      try {
+        const { data } = await getClassroomFiles(id);
+        setClassroomFiles(Array.isArray(data) ? data : []);
+      } catch {
+        setClassroomFiles([]);
+      } finally {
+        setLoadingFiles(false);
+      }
+    };
+    void loadClassroomFiles();
+  }, [hasHydrated, token, user, id]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const handleOpenFile = async (fileId: string) => {
+    setOpeningFileId(fileId);
+    try {
+      const { data } = await getFileDownload(fileId, "secure");
+      window.open(data.download_url, "_blank", "noopener,noreferrer");
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail ?? "Failed to open file.";
+      toast.error(detail);
+    } finally {
+      setOpeningFileId(null);
+    }
+  };
 
   const handleEnroll = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -364,6 +419,101 @@ export default function ClassroomDetailPage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-slate-500" />
+              Question Files
+              <Badge variant="secondary" className="text-xs bg-slate-50 text-slate-600">
+                {classroomFiles.length}
+              </Badge>
+            </h2>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {loadingFiles && (
+              <div className="px-5 py-4">
+                <ApiLoadingState message="Loading classroom files..." compact />
+              </div>
+            )}
+            {classroomFiles.map((file) => (
+              <div
+                key={file.file_id}
+                className="px-5 py-3.5 flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-800 truncate">
+                    {file.filename ?? file.file_name ?? file.key ?? file.file_id}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Uploaded{" "}
+                    {file.created_at
+                      ? new Date(file.created_at).toLocaleString()
+                      : "recently"}
+                  </p>
+                  {file.publish_at ? (
+                    <>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Scheduled publish: {new Date(file.publish_at).toLocaleString()}
+                      </p>
+                      {new Date(file.publish_at).getTime() > nowMs ? (
+                        <p className="text-xs text-amber-700 mt-0.5">
+                          {formatCountdown(new Date(file.publish_at).getTime(), nowMs)}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {file.publish_at ? (
+                    <Badge
+                      variant="secondary"
+                      className={
+                        new Date(file.publish_at).getTime() > Date.now()
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      }
+                    >
+                      {new Date(file.publish_at).getTime() > Date.now()
+                        ? "scheduled"
+                        : "published"}
+                    </Badge>
+                  ) : null}
+                  <Badge
+                    variant="secondary"
+                    className={
+                      (file.status ?? file.mode) === "secure"
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : (file.status ?? file.mode) === "insecure"
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-slate-100 text-slate-700 border-slate-200"
+                    }
+                  >
+                    {(file.status ?? file.mode) === "secure"
+                      ? "with friction"
+                      : (file.status ?? file.mode) === "insecure"
+                        ? "without friction"
+                        : "file"}
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-lg"
+                    disabled={openingFileId === file.file_id}
+                    onClick={() => handleOpenFile(file.file_id)}
+                  >
+                    {openingFileId === file.file_id ? "Opening..." : "Open"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {!loadingFiles && classroomFiles.length === 0 && (
+              <div className="px-5 py-4 text-sm text-slate-500">
+                No question files uploaded for this classroom yet.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
               <Users className="h-4 w-4 text-slate-500" />
               Students
               <Badge variant="secondary" className="text-xs bg-slate-50 text-slate-600">
@@ -380,7 +530,9 @@ export default function ClassroomDetailPage() {
 
           <div className="divide-y divide-slate-100">
             {loadingStudents && (
-              <div className="px-5 py-4 text-sm text-slate-500">Loading students…</div>
+              <div className="px-5 py-4">
+                <ApiLoadingState message="Loading students..." compact />
+              </div>
             )}
             {students.map((student) => (
               <div
@@ -458,6 +610,25 @@ fetch("${BASE}/api/secure/marks/update", {
                   "200 OK — marks updated. Any authenticated user can edit any grade.",
                 secure:
                   "403 Forbidden — server validates role (teacher only) + classroom ownership + student enrollment.",
+              }}
+            />
+
+            <ExploitHint
+              title="Presigned URL Misuse — File Overwrite"
+              description="Students do not see overwrite controls in UI, but a leaked pre-signed PUT URL can still be used directly from terminal."
+              hint="Can you REALLY not overwrite? UI restriction is not security."
+              actionLabel="Try in Terminal"
+              runIn="terminal"
+              showSecureSection={false}
+              generateInsecureCode={() =>
+                `# Replace both placeholders, then run in terminal
+curl -X PUT "<PRESIGNED_PUT_URL>" \\
+  -H "Content-Type: application/pdf" \\
+  --upload-file "/absolute/path/to/replacement.pdf"`
+              }
+              expectedResult={{
+                insecure:
+                  "Upload may succeed if leaked URL is still valid, enabling unauthorized overwrite.",
               }}
             />
           </div>

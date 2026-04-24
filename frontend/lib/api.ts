@@ -62,6 +62,42 @@ export interface MarkRecord {
   updated_at: string;
 }
 
+export interface InsecureUploadUrlResponse {
+  upload_url: string;
+  key: string;
+  expires_in: number;
+}
+
+export interface InsecureUploadConfirmResponse {
+  detail: string;
+  file_id: string;
+}
+
+export interface SecureUploadRequestResponse {
+  file_id: string;
+  upload_url: string;
+  key: string;
+  expires_in: number;
+}
+
+export interface ClassroomFileRecord {
+  file_id: string;
+  classroom_id?: string;
+  filename?: string;
+  file_name?: string;
+  key?: string;
+  status?: string;
+  mode?: "secure" | "insecure";
+  publish_at?: string;
+  created_at?: string;
+}
+
+export interface FileAccessResponse {
+  file_id?: string;
+  download_url: string;
+  expires_in?: number;
+}
+
 export const login = (email: string, password: string) =>
   api.post<AuthResponse>("/api/auth/login", { email, password });
 
@@ -126,13 +162,50 @@ export const secureUpdateMarks = (payload: MarkPayload) =>
 // ─── File Access ─────────────────────────────────────────────────────────────
 
 export const insecureFileAccess = (key: string) =>
-  api.get(`/api/insecure/file-url?key=${encodeURIComponent(key)}`);
+  api.get(`/api/insecure/files/file-url?key=${encodeURIComponent(key)}`);
 
 export const secureFileAccess = (sessionId: string) =>
   api.get(`/api/secure/file-url?session_id=${encodeURIComponent(sessionId)}`);
 
-export const insecureUploadUrl = (key: string) =>
-  api.get(`/api/insecure/upload-url?key=${encodeURIComponent(key)}`);
+export const insecureFilesUploadUrl = (key: string) =>
+  api.post<InsecureUploadUrlResponse>("/api/insecure/files/upload-url", { key });
+
+export const insecureFilesConfirm = (key: string, classroomId: string) =>
+  api.post<InsecureUploadConfirmResponse>("/api/insecure/files/confirm", {
+    key,
+    classroom_id: classroomId,
+  });
+
+export const secureFilesUploadRequest = (
+  classroomId: string,
+  fileType: "pdf" | "docx" | "txt" = "pdf"
+) =>
+  api.post<SecureUploadRequestResponse>("/api/secure/files/upload-request", {
+    classroom_id: classroomId,
+    file_type: fileType,
+  });
+
+export const secureFilesUploadConfirm = (fileId: string) =>
+  api.post("/api/secure/files/upload-confirm", { file_id: fileId });
+
+export const secureFilesSchedule = (fileId: string, publishAt: string) =>
+  api.post("/api/files/schedule", {
+    file_id: fileId,
+    publish_at: publishAt,
+  });
+
+export const getClassroomFiles = (classroomId: string) =>
+  api.get<ClassroomFileRecord[]>(
+    `/api/files/classroom/${encodeURIComponent(classroomId)}`
+  );
+
+export const getFileDownload = (
+  fileId: string,
+  mode: "secure" | "insecure" = "secure"
+) =>
+  api.get<FileAccessResponse>(
+    `/api/files/${encodeURIComponent(fileId)}?mode=${encodeURIComponent(mode)}`
+  );
 
 export const secureUploadUrl = (classroomId?: string) =>
   api.get(
