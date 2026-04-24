@@ -12,7 +12,9 @@ for logout and delete to demonstrate both behaviours.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.routers import admin
 from app.routers import auth
+from app.routers import marks
 from app.routers.insecure import files as insecure_files
 from app.routers.insecure import marks as insecure_marks
 from app.routers.secure import files as secure_files
@@ -37,6 +39,8 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router)
+app.include_router(admin.router)
+app.include_router(marks.router)
 app.include_router(insecure_marks.router)
 app.include_router(insecure_files.router)
 app.include_router(secure_marks.router)

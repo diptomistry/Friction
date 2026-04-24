@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
@@ -31,6 +32,11 @@ class UserOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AdminUserUpdateRequest(BaseModel):
+    role: Optional[str] = None  # student | teacher | admin
+    is_active: Optional[bool] = None
 
 
 # ── Marks ─────────────────────────────────────────────────────────────────────

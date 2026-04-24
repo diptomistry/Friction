@@ -10,7 +10,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.utils import (
@@ -20,7 +20,7 @@ from app.auth.utils import (
     verify_password,
 )
 from app.database import get_db
-from app.models import TokenBlacklist, User
+from app.models import Classroom, ClassroomStudent, Mark, TokenBlacklist, UploadSession, User
 from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -160,9 +160,9 @@ async def delete_me(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    secure  → WITH FRICTION (SECURE): soft-deletes user AND blacklists token.
-    insecure → NO FRICTION (VULNERABLE): soft-deletes user but does NOT blacklist
-               token, so the deleted user's token still grants API access.
+    secure  → WITH FRICTION (SECURE): hard-deletes user and blacklists token jti.
+    insecure → NO FRICTION (VULNERABLE): hard-deletes user but does NOT blacklist
+               the current token.
     """
     try:
         payload = decode_token(credentials.credentials)
@@ -175,22 +175,42 @@ async def delete_me(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Soft-delete
-    user.is_active = False
-    await db.commit()
+    # Hard-delete dependent records first to satisfy foreign keys.
+    taught_classroom_ids = (
+        await db.execute(select(Classroom.id).where(Classroom.teacher_id == user.id))
+    ).scalars().all()
+
+    if taught_classroom_ids:
+        await db.execute(
+            delete(ClassroomStudent).where(ClassroomStudent.classroom_id.in_(taught_classroom_ids))
+        )
+        await db.execute(delete(Mark).where(Mark.classroom_id.in_(taught_classroom_ids)))
+        await db.execute(
+            delete(UploadSession).where(UploadSession.classroom_id.in_(taught_classroom_ids))
+        )
+        await db.execute(delete(Classroom).where(Classroom.id.in_(taught_classroom_ids)))
+
+    # Remove records where the user is a student/uploader/token owner.
+    await db.execute(delete(ClassroomStudent).where(ClassroomStudent.student_id == user.id))
+    await db.execute(delete(Mark).where(Mark.student_id == user.id))
+    await db.execute(delete(UploadSession).where(UploadSession.user_id == user.id))
+    await db.execute(delete(TokenBlacklist).where(TokenBlacklist.user_id == user.id))
+
+    # Remove the user row itself.
+    await db.delete(user)
 
     if mode == "insecure":
-        # NO FRICTION (VULNERABLE): token remains valid — deleted user can still
-        # call authenticated endpoints via the insecure dependency
-        return {"detail": "Account deleted (token still valid — insecure mode)"}
+        # NO FRICTION (VULNERABLE): no token revocation record is created.
+        await db.commit()
+        return {"detail": "Account deleted permanently (token not revoked — insecure mode)"}
 
-    # WITH FRICTION (SECURE): revoke the token immediately
+    # WITH FRICTION (SECURE): revoke the token immediately (without FK to deleted user)
     jti = payload.get("jti")
     exp = payload.get("exp")
     expires_at = datetime.utcfromtimestamp(exp)
     existing = await db.execute(select(TokenBlacklist).where(TokenBlacklist.jti == jti))
     if not existing.scalar_one_or_none():
-        db.add(TokenBlacklist(user_id=user_id, jti=jti, expires_at=expires_at))
-        await db.commit()
+        db.add(TokenBlacklist(user_id=None, jti=jti, expires_at=expires_at))
+    await db.commit()
 
-    return {"detail": "Account deleted and token revoked immediately"}
+    return {"detail": "Account deleted permanently and token revoked immediately"}
