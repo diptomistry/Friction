@@ -23,22 +23,27 @@ Interactive docs: `http://localhost:8000/docs`
    - [GET /api/admin/users/{user_id}](#get-apiadminusersuser_id)
    - [PATCH /api/admin/users/{user_id}](#patch-apiadminusersuser_id)
    - [DELETE /api/admin/users/{user_id}](#delete-apiadminusersuser_id)
-3. [Marks Endpoints (Role-based)](#3-marks-endpoints-role-based)
+3. [Classroom Endpoints](#3-classroom-endpoints)
+   - [GET /api/classrooms](#get-apiclassrooms)
+   - [POST /api/classrooms](#post-apiclassrooms)
+   - [POST /api/classrooms/{classroom_id}/students](#post-apiclassroomsclassroom_idstudents)
+   - [GET /api/classrooms/{classroom_id}/students](#get-apiclassroomsclassroom_idstudents)
+4. [Marks Endpoints (Role-based)](#4-marks-endpoints-role-based)
    - [GET /api/marks](#get-apimarks)
    - [PUT /api/marks/update](#put-apimarksupdate)
-4. [Marks — Insecure](#4-marks--insecure)
+5. [Marks — Insecure](#5-marks--insecure)
    - [PUT /api/insecure/marks/update](#put-apiinsecuremarksupdate)
-5. [Marks — Secure](#5-marks--secure)
+6. [Marks — Secure](#6-marks--secure)
    - [PUT /api/secure/marks/update](#put-apisecuremarksupdate)
-6. [File Upload — Insecure](#6-file-upload--insecure)
+7. [File Upload — Insecure](#7-file-upload--insecure)
    - [GET /api/insecure/upload-url](#get-apiinsecureupload-url)
    - [GET /api/insecure/file-url](#get-apiinsecurefile-url)
-7. [File Upload — Secure](#7-file-upload--secure)
+8. [File Upload — Secure](#8-file-upload--secure)
    - [GET /api/secure/upload-url](#get-apisecureupload-url)
    - [GET /api/secure/file-url](#get-apisecurefile-url)
-8. [Friction Comparison Table](#8-friction-comparison-table)
-9. [JWT Payload Reference](#9-jwt-payload-reference)
-10. [Error Reference](#10-error-reference)
+9. [Friction Comparison Table](#9-friction-comparison-table)
+10. [JWT Payload Reference](#10-jwt-payload-reference)
+11. [Error Reference](#11-error-reference)
 
 ---
 
@@ -260,7 +265,58 @@ Hard delete a user account and related records.
 
 ---
 
-## 3. Marks Endpoints (Role-based)
+## 3. Classroom Endpoints
+
+### GET /api/classrooms
+
+List classrooms by role.
+
+**Auth:** `Bearer <token>` required (secure auth)
+
+Behavior:
+- `admin` → all classrooms
+- `teacher` → only classrooms where `teacher_id = current_user.id`
+- `student` → only classrooms where enrolled in `classroom_students`
+
+### POST /api/classrooms
+
+Teacher creates a classroom.
+
+**Auth:** `Bearer <token>` required (secure auth)  
+**Role:** `teacher` only
+
+**Request body**
+```json
+{
+  "name": "Physics - Section A"
+}
+```
+
+### POST /api/classrooms/{classroom_id}/students
+
+Teacher enrolls a student into a classroom.
+
+**Auth:** `Bearer <token>` required (secure auth)  
+**Role:** `teacher` only  
+**Ownership:** teacher must own the classroom
+
+**Request body**
+```json
+{
+  "student_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### GET /api/classrooms/{classroom_id}/students
+
+List students enrolled in a classroom.
+
+**Auth:** `Bearer <token>` required (secure auth)  
+**Role:** `teacher` (owner only) or `admin`
+
+---
+
+## 4. Marks Endpoints (Role-based)
 
 ### GET /api/marks
 
@@ -308,7 +364,7 @@ Validation:
 
 ---
 
-## 4. Marks — Insecure
+## 5. Marks — Insecure
 
 ### PUT /api/insecure/marks/update
 
@@ -343,7 +399,7 @@ Validation:
 
 ---
 
-## 5. Marks — Secure
+## 6. Marks — Secure
 
 ### PUT /api/secure/marks/update
 
@@ -388,7 +444,7 @@ Validation:
 
 ---
 
-## 6. File Upload — Insecure
+## 7. File Upload — Insecure
 
 ### GET /api/insecure/upload-url
 
@@ -448,7 +504,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 7. File Upload — Secure
+## 8. File Upload — Secure
 
 ### GET /api/secure/upload-url
 
@@ -525,7 +581,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 8. Friction Comparison Table
+## 9. Friction Comparison Table
 
 | Feature | `/insecure/` | `/secure/` |
 |---------|-------------|------------|
@@ -543,7 +599,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 9. JWT Payload Reference
+## 10. JWT Payload Reference
 
 ```json
 {
@@ -563,7 +619,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 10. Error Reference
+## 11. Error Reference
 
 All error responses follow FastAPI's standard shape:
 

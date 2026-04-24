@@ -38,6 +38,30 @@ export interface AdminUser {
   created_at: string;
 }
 
+export interface ClassroomStudent {
+  id: string;
+  email: string;
+  role?: "student" | "teacher" | "admin";
+  is_active?: boolean;
+  created_at?: string;
+}
+
+export interface ClassroomRecord {
+  id: string;
+  name: string;
+  teacher_id?: string;
+  created_at?: string;
+  student_count?: number;
+}
+
+export interface MarkRecord {
+  id: string;
+  student_id: string;
+  classroom_id: string;
+  marks: number;
+  updated_at: string;
+}
+
 export const login = (email: string, password: string) =>
   api.post<AuthResponse>("/api/auth/login", { email, password });
 
@@ -62,6 +86,25 @@ export const listAdminUsers = () => api.get<AdminUser[]>("/api/admin/users");
 
 export const deleteAdminUser = (userId: string) =>
   api.delete(`/api/admin/users/${encodeURIComponent(userId)}`);
+
+// ─── Classrooms ───────────────────────────────────────────────────────────────
+
+export const createClassroom = (name: string) =>
+  api.post("/api/classrooms", { name });
+
+export const getClassrooms = () => api.get<ClassroomRecord[]>("/api/classrooms");
+
+export const enrollStudent = (classroomId: string, studentId: string) =>
+  api.post(`/api/classrooms/${encodeURIComponent(classroomId)}/students`, {
+    student_id: studentId,
+  });
+
+export const getClassroomStudents = (classroomId: string) =>
+  api.get<ClassroomStudent[]>(
+    `/api/classrooms/${encodeURIComponent(classroomId)}/students`
+  );
+
+export const getMarks = () => api.get<MarkRecord[]>("/api/marks");
 
 // ─── Marks ───────────────────────────────────────────────────────────────────
 

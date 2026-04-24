@@ -39,6 +39,26 @@ class AdminUserUpdateRequest(BaseModel):
     is_active: Optional[bool] = None
 
 
+# ── Classrooms ────────────────────────────────────────────────────────────────
+
+class ClassroomCreateRequest(BaseModel):
+    name: str
+
+
+class ClassroomStudentAddRequest(BaseModel):
+    student_id: uuid.UUID
+
+
+class ClassroomOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    teacher_id: uuid.UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ── Marks ─────────────────────────────────────────────────────────────────────
 
 class MarkUpdateRequest(BaseModel):

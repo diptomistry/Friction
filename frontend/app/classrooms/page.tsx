@@ -8,88 +8,98 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import {
+  createClassroom,
+  getClassrooms,
+  getMarks,
+  type ClassroomRecord,
+  type MarkRecord,
+} from "@/lib/api";
 import {
   BookOpen,
   Plus,
   Users,
   ChevronRight,
-  GraduationCap,
 } from "lucide-react";
 import Link from "next/link";
 
 interface Classroom {
   id: string;
   name: string;
-  subject: string;
-  teacher_email: string;
   student_count: number;
-  created_at: string;
+  marks_count: number;
 }
-
-const DEMO_CLASSROOMS: Classroom[] = [
-  {
-    id: "demo-1",
-    name: "Web Security 101",
-    subject: "Computer Science",
-    teacher_email: "prof.smith@school.edu",
-    student_count: 24,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "demo-2",
-    name: "Applied Cryptography",
-    subject: "Mathematics",
-    teacher_email: "dr.jones@school.edu",
-    student_count: 18,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "demo-3",
-    name: "Network Protocols",
-    subject: "Engineering",
-    teacher_email: "prof.lee@school.edu",
-    student_count: 31,
-    created_at: new Date().toISOString(),
-  },
-];
 
 export default function ClassroomsPage() {
   const router = useRouter();
   const { user, token, hasHydrated } = useStore();
 
-  const [classrooms, setClassrooms] = useState<Classroom[]>(DEMO_CLASSROOMS);
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newSubject, setNewSubject] = useState("");
+  const [loadingClassrooms, setLoadingClassrooms] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (hasHydrated && !token) router.push("/login");
   }, [hasHydrated, token, router]);
 
+  useEffect(() => {
+    if (!hasHydrated || !token) return;
+    const loadClassrooms = async () => {
+      setLoadingClassrooms(true);
+      try {
+        const [{ data: classroomsData }, { data: marks }] = await Promise.all([
+          getClassrooms(),
+          getMarks(),
+        ]);
+        const grouped = marks.reduce<Record<string, MarkRecord[]>>((acc, row) => {
+          acc[row.classroom_id] = acc[row.classroom_id] ?? [];
+          acc[row.classroom_id].push(row);
+          return acc;
+        }, {});
+
+        const liveClassrooms: Classroom[] = (classroomsData as ClassroomRecord[]).map(
+          (room) => {
+            const rows = grouped[room.id] ?? [];
+            const uniqueStudents = new Set(rows.map((r) => r.student_id)).size;
+            return {
+              id: room.id,
+              name: room.name,
+              student_count: room.student_count ?? uniqueStudents,
+              marks_count: rows.length,
+            };
+          }
+        );
+        setClassrooms(liveClassrooms);
+      } catch {
+        toast.error("Could not load classrooms from API.");
+      } finally {
+        setLoadingClassrooms(false);
+      }
+    };
+    void loadClassrooms();
+  }, [hasHydrated, token]);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
     setLoading(true);
     try {
-      // Attempt real API call; fall back to demo if not implemented
-      const res = await api
-        .post("/api/classrooms", { name: newName, subject: newSubject })
-        .catch(() => null);
-
-      const newRoom: Classroom = res?.data ?? {
-        id: `demo-${Date.now()}`,
+      const res = await createClassroom(newName);
+      const newId =
+        (res.data as { id?: string; classroom_id?: string })?.id ??
+        (res.data as { id?: string; classroom_id?: string })?.classroom_id ??
+        `new-${Date.now()}`;
+      const newRoom: Classroom = {
+        id: String(newId),
         name: newName,
-        subject: newSubject || "General",
-        teacher_email: user?.email ?? "you@school.edu",
         student_count: 0,
-        created_at: new Date().toISOString(),
+        marks_count: 0,
       };
 
       setClassrooms((prev) => [newRoom, ...prev]);
       setNewName("");
-      setNewSubject("");
       setCreating(false);
       toast.success("Classroom created!");
     } catch {
@@ -142,12 +152,6 @@ export default function ClassroomsPage() {
                 required
                 className="rounded-xl"
               />
-              <Input
-                placeholder="Subject (e.g. Computer Science)"
-                value={newSubject}
-                onChange={(e) => setNewSubject(e.target.value)}
-                className="rounded-xl"
-              />
               <div className="flex gap-2">
                 <Button
                   type="submit"
@@ -173,6 +177,11 @@ export default function ClassroomsPage() {
 
         {/* Classroom list */}
         <div className="space-y-3">
+          {loadingClassrooms && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-sm text-slate-500">
+              Loading classrooms...
+            </div>
+          )}
           {classrooms.map((room) => (
             <Link
               key={room.id}
@@ -186,13 +195,7 @@ export default function ClassroomsPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-slate-900">{room.name}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {room.subject} ·{" "}
-                      <span className="inline-flex items-center gap-1">
-                        <GraduationCap className="h-3 w-3" />
-                        {room.teacher_email}
-                      </span>
-                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">Classroom</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -202,6 +205,12 @@ export default function ClassroomsPage() {
                   >
                     <Users className="h-3 w-3" />
                     {room.student_count}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs gap-1 bg-violet-50 text-violet-700 border-violet-200"
+                  >
+                    Marks {room.marks_count}
                   </Badge>
                   <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-violet-500 transition-colors" />
                 </div>

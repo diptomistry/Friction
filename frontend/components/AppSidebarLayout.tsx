@@ -38,11 +38,22 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-const baseNavLinks = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/classrooms", label: "Classrooms", icon: BookOpen },
-  { href: "/uploads", label: "Uploads", icon: Upload },
-];
+const navByRole = {
+  student: [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/classrooms", label: "Classrooms", icon: BookOpen },
+    { href: "/uploads", label: "Uploads", icon: Upload },
+  ],
+  teacher: [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/classrooms", label: "Classrooms", icon: BookOpen },
+  ],
+  admin: [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard/users", label: "Manage Users", icon: ShieldAlert },
+    { href: "/classrooms", label: "Classrooms", icon: BookOpen },
+  ],
+} as const;
 
 function TextLogo() {
   return (
@@ -95,13 +106,7 @@ export default function AppSidebarLayout({
       .map((part) => part[0]?.toUpperCase())
       .join("") || "CX";
 
-  const navLinks =
-    user?.role === "admin"
-      ? [
-          ...baseNavLinks,
-          { href: "/dashboard/users", label: "Manage Users", icon: ShieldAlert },
-        ]
-      : baseNavLinks;
+  const navLinks = user ? navByRole[user.role] : navByRole.student;
 
   return (
     <SidebarProvider>
@@ -118,8 +123,14 @@ export default function AppSidebarLayout({
               <SidebarMenu>
                 {navLinks.map(({ href, label, icon: Icon }) => (
                   <SidebarMenuItem key={href}>
+                    {(() => {
+                      const isActive =
+                        href === "/dashboard"
+                          ? pathname === "/dashboard"
+                          : pathname.startsWith(href);
+                      return (
                     <SidebarMenuButton
-                      isActive={pathname.startsWith(href)}
+                      isActive={isActive}
                       className="h-10 rounded-xl data-[active=true]:bg-violet-50 data-[active=true]:text-violet-700"
                       render={
                         <Link href={href}>
@@ -131,6 +142,8 @@ export default function AppSidebarLayout({
                       <Icon className="h-4 w-4" />
                       <span>{label}</span>
                     </SidebarMenuButton>
+                      );
+                    })()}
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
