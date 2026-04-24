@@ -178,11 +178,11 @@ export const insecureFilesConfirm = (key: string, classroomId: string) =>
 
 export const secureFilesUploadRequest = (
   classroomId: string,
-  fileType: "pdf" | "docx" | "txt" = "pdf"
+  filename: string
 ) =>
   api.post<SecureUploadRequestResponse>("/api/secure/files/upload-request", {
     classroom_id: classroomId,
-    file_type: fileType,
+    filename,
   });
 
 export const secureFilesUploadConfirm = (fileId: string) =>
@@ -199,13 +199,8 @@ export const getClassroomFiles = (classroomId: string) =>
     `/api/files/classroom/${encodeURIComponent(classroomId)}`
   );
 
-export const getFileDownload = (
-  fileId: string,
-  mode: "secure" | "insecure" = "secure"
-) =>
-  api.get<FileAccessResponse>(
-    `/api/files/${encodeURIComponent(fileId)}?mode=${encodeURIComponent(mode)}`
-  );
+export const getFileDownload = (fileId: string) =>
+  api.get<FileAccessResponse>(`/api/files/${encodeURIComponent(fileId)}`);
 
 export const secureUploadUrl = (classroomId?: string) =>
   api.get(

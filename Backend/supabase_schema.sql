@@ -49,6 +49,7 @@ create table files (
 
   temp_key text not null,
   final_key text,
+  content_hash text,
 
   status text check (
     status in ('draft','scheduled','published','expired')

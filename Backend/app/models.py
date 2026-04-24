@@ -91,6 +91,7 @@ class File(Base):
     )
     temp_key: Mapped[str] = mapped_column(Text, nullable=False)
     final_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(20),
         CheckConstraint("status IN ('draft','scheduled','published','expired')"),

@@ -93,7 +93,7 @@ export default function UploadsPage() {
       if (mode === "secure") {
         const { data: uploadRequest } = await secureFilesUploadRequest(
           classroomId.trim(),
-          "pdf"
+          file.name
         );
         const putRes = await fetch(uploadRequest.upload_url, {
           method: "PUT",

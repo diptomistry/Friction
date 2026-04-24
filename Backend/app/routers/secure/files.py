@@ -7,14 +7,13 @@ Schedule is unified at: POST /api/files/schedule
 Download is unified at: GET /api/files/{file_id}?mode=secure
 
 Friction layers applied:
-  1. Backend-generated file_id and storage key.
-  2. Short-lived upload URL (300 seconds).
+  1. Backend file_id mapping + deterministic filename key.
+  2. 7-day upload URL validity.
   3. Schedule-based visibility via file_schedules.
-  4. Access checks before issuing download URL (handled by unified endpoint).
+  4. Content hash captured on confirm; verified on secure download.
 """
 
 import uuid
-from datetime import datetime, timedelta
 
 import boto3
 from botocore.config import Config
@@ -34,8 +33,8 @@ from app.schemas import (
 
 router = APIRouter(prefix="/api/secure/files", tags=["secure-files"])
 
-# WITH FRICTION (SECURE): short expiry
-_SECURE_EXPIRY = 300  # 5 minutes
+# WITH FRICTION (SECURE): 7-day upload URL (integrity checked by hash)
+_SECURE_EXPIRY = 7 * 24 * 3600
 
 
 def _get_s3_client():
@@ -54,8 +53,8 @@ async def upload_request_secure(
     current_user: User = Depends(get_current_user_secure),
     db: AsyncSession = Depends(get_db),
 ):
-    if body.file_type.lower() != "pdf":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pdf is allowed")
+    if not body.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pdf filename is allowed")
 
     classroom = (
         await db.execute(select(Classroom).where(Classroom.id == body.classroom_id))
@@ -66,8 +65,8 @@ async def upload_request_secure(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this classroom")
 
     file_id = uuid.uuid4()
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
-    key = f"submissions/{current_user.id}/{file_id}/{timestamp}.pdf"
+    safe_filename = body.filename.replace("/", "_").replace("\\", "_")
+    key = f"submissions/{body.classroom_id}/{safe_filename}"
 
     s3 = _get_s3_client()
     upload_url = s3.generate_presigned_url(
@@ -111,7 +110,18 @@ async def upload_confirm_secure(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not own this file",
         )
+    s3 = _get_s3_client()
+    try:
+        obj = s3.head_object(Bucket=settings.R2_BUCKET_NAME, Key=file_record.temp_key)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded object not found")
+
+    etag = (obj.get("ETag") or "").replace('"', "")
+    if not etag:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to compute file hash")
+
     file_record.final_key = file_record.temp_key
+    file_record.content_hash = etag
     file_record.status = "draft"
     await db.commit()
     return {"detail": "Upload confirmed", "file_id": str(file_record.file_id)}

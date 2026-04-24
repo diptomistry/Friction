@@ -21,7 +21,7 @@ Use the routes below (they supersede older `/api/insecure/upload-url` and `/api/
   - `POST /api/secure/files/upload-confirm`
 - Shared file endpoints:
   - `POST /api/files/schedule`
-  - `GET /api/files/{file_id}?mode=secure|insecure`
+  - `GET /api/files/{file_id}`
   - `GET /api/files/classroom/{classroom_id}`
 
 Global visibility rule:
@@ -553,13 +553,15 @@ Schedule file visibility (general endpoint).
 
 Unified file download endpoint.
 
-**Auth:** `Bearer <token>` required  
-**Query:** `?mode=secure|insecure` (default: `secure`)
+**Auth:** `Bearer <token>` required
 
 Behavior:
 - Always enforces schedule visibility (`publish_at <= now`)
-- `secure` mode: role/access checks, short expiry (300s)
-- `insecure` mode: no ownership checks, long expiry (7 days)
+- if `content_hash` exists:
+  - applies secure-style role/access checks
+  - verifies checksum integrity before issuing URL
+- if `content_hash` is missing:
+  - applies insecure-style access (no ownership checks)
 
 ### GET /api/files/classroom/{classroom_id}
 
@@ -595,15 +597,15 @@ Each list item includes:
 ```json
 {
   "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-  "file_type": "pdf"
+  "filename": "midterm.pdf"
 }
 ```
 
 **Friction layers:**
-1. Backend generates `file_id`.
-2. Backend generates temp storage key.
-3. Client cannot choose final object identity.
-4. Short-lived upload URL (300 seconds).
+1. Backend generates `file_id` mapping.
+2. Key is deterministic from classroom + filename.
+3. Upload URL is valid for 7 days.
+4. Confirm step captures object checksum hash (`ETag`).
 
 **Example request**
 ```
@@ -615,15 +617,15 @@ Authorization: Bearer <token>
 ```json
 {
   "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "upload_url": "https://<r2-endpoint>/bucket/submissions/...",
-  "key": "submissions/<owner>/<file_id>/<timestamp>.pdf",
-  "expires_in": 300
+  "upload_url": "https://<r2-endpoint>/bucket/submissions/<classroom_id>/<filename>.pdf?X-Amz-...",
+  "key": "submissions/<classroom_id>/<filename>.pdf",
+  "expires_in": 604800
 }
 ```
 
 ### POST /api/secure/files/upload-confirm
 
-Confirm upload completion and bind uploaded object to the `file_id`.
+Confirm upload completion, bind uploaded object to `file_id`, and store checksum hash.
 
 **Request body**
 ```json
@@ -642,10 +644,11 @@ Confirm upload completion and bind uploaded object to the `file_id`.
 | **Marks — role** | Any authenticated user | `teacher` only |
 | **Marks — ownership** | Not checked | Teacher must own classroom |
 | **Marks — enrollment** | Not checked | Student must be in classroom |
-| **Upload key** | User-controlled (overwrite risk) | Backend-generated from `file_id` |
-| **Upload expiry** | 7 days (604 800 s) | 300 s (5 minutes) |
+| **Upload key** | User-controlled (overwrite risk) | Deterministic `submissions/{classroom_id}/{filename}` |
+| **Upload expiry** | 7 days (604 800 s) | 7 days (604 800 s) |
 | **Scheduling check** | Enforced globally on download | Enforced globally on download |
-| **File access** | Unified `/api/files/{file_id}?mode=insecure`, no ownership checks | Unified `/api/files/{file_id}?mode=secure`, role/access validation |
+| **Integrity check** | None | Checksum (`ETag`) verified on secure download |
+| **File access** | Unified `/api/files/{file_id}` with DB-driven policy (`content_hash` missing => insecure behavior) | Unified `/api/files/{file_id}` with DB-driven policy (`content_hash` exists => secure behavior) |
 
 ---
 

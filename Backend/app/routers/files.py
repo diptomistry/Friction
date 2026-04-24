@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import boto3
 from botocore.config import Config
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy import select
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/files", tags=["files"])
 bearer_scheme = HTTPBearer()
 
 _INSECURE_EXPIRY = 7 * 24 * 3600
-_SECURE_EXPIRY = 300
+_SECURE_EXPIRY = 7 * 24 * 3600
 
 
 def _to_utc_aware(dt: datetime) -> datetime:
@@ -55,8 +55,7 @@ def _get_s3_client():
     )
 
 
-async def _resolve_user(
-    mode: str,
+async def _resolve_user_basic(
     credentials: HTTPAuthorizationCredentials,
     db: AsyncSession,
 ) -> User:
@@ -69,19 +68,18 @@ async def _resolve_user(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    if mode == "secure":
-        blacklisted = await db.execute(
-            select(TokenBlacklist).where(
-                TokenBlacklist.jti == payload.get("jti"),
-                TokenBlacklist.expires_at > datetime.now(timezone.utc).replace(tzinfo=None),
-            )
-        )
-        if blacklisted.scalar_one_or_none():
-            raise HTTPException(status_code=401, detail="Token has been revoked")
-        if not user.is_active:
-            raise HTTPException(status_code=403, detail="User inactive")
-
     return user
+
+
+def _extract_jti(credentials: HTTPAuthorizationCredentials) -> str:
+    try:
+        payload = decode_token(credentials.credentials)
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    jti = payload.get("jti")
+    if not jti:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+    return jti
 
 
 @router.get("/classroom/{classroom_id}", response_model=list[FileListItemResponse])
@@ -156,11 +154,10 @@ async def list_classroom_files(
 @router.get("/{file_id}", response_model=FileUrlResponse)
 async def get_file_url(
     file_id: uuid.UUID,
-    mode: str = Query(default="secure", pattern="^(secure|insecure)$"),
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ):
-    current_user = await _resolve_user(mode, credentials, db)
+    current_user = await _resolve_user_basic(credentials, db)
 
     file_record = (await db.execute(select(File).where(File.file_id == file_id))).scalar_one_or_none()
     if not file_record:
@@ -181,7 +178,22 @@ async def get_file_url(
     if now_utc < schedule_publish_utc:
         raise HTTPException(status_code=403, detail="File is not available yet")
 
-    if mode == "secure" and current_user.role != "admin":
+    is_secure_file = bool(file_record.content_hash)
+
+    if is_secure_file:
+        jti = _extract_jti(credentials)
+        blacklisted = await db.execute(
+            select(TokenBlacklist).where(
+                TokenBlacklist.jti == jti,
+                TokenBlacklist.expires_at > datetime.now(timezone.utc).replace(tzinfo=None),
+            )
+        )
+        if blacklisted.scalar_one_or_none():
+            raise HTTPException(status_code=401, detail="Token has been revoked")
+        if not current_user.is_active:
+            raise HTTPException(status_code=403, detail="User inactive")
+
+    if is_secure_file and current_user.role != "admin":
         if file_record.owner_id == current_user.id:
             pass
         elif current_user.role == "teacher":
@@ -210,7 +222,23 @@ async def get_file_url(
             raise HTTPException(status_code=403, detail="Access denied")
 
     s3 = _get_s3_client()
-    expires = _SECURE_EXPIRY if mode == "secure" else _INSECURE_EXPIRY
+    expires = _SECURE_EXPIRY if is_secure_file else _INSECURE_EXPIRY
+    if is_secure_file:
+        try:
+            obj = s3.head_object(
+                Bucket=settings.R2_BUCKET_NAME,
+                Key=file_record.final_key or file_record.temp_key,
+            )
+        except Exception:
+            raise HTTPException(status_code=409, detail="File object missing or inaccessible")
+
+        current_hash = (obj.get("ETag") or "").replace('"', "")
+        if not file_record.content_hash or current_hash != file_record.content_hash:
+            raise HTTPException(
+                status_code=409,
+                detail="File integrity check failed (checksum mismatch)",
+            )
+
     download_url = s3.generate_presigned_url(
         "get_object",
         Params={"Bucket": settings.R2_BUCKET_NAME, "Key": file_record.final_key or file_record.temp_key},

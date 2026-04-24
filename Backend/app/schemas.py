@@ -109,7 +109,7 @@ class InsecureFileConfirmRequest(BaseModel):
 
 class SecureFileUploadRequest(BaseModel):
     classroom_id: uuid.UUID
-    file_type: str = "pdf"
+    filename: str
 
 
 class SecureFileUploadConfirmRequest(BaseModel):

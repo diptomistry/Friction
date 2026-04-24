@@ -288,7 +288,7 @@ export default function ClassroomDetailPage() {
   const handleOpenFile = async (fileId: string) => {
     setOpeningFileId(fileId);
     try {
-      const { data } = await getFileDownload(fileId, "secure");
+      const { data } = await getFileDownload(fileId);
       window.open(data.download_url, "_blank", "noopener,noreferrer");
     } catch (err: unknown) {
       const detail =
