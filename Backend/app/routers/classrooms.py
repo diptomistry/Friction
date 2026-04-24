@@ -79,6 +79,28 @@ async def create_classroom(
     return classroom
 
 
+@router.get("/students/all", response_model=list[UserOut])
+async def list_all_students_for_teacher(
+    current_user: User = Depends(get_current_user_secure),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Teacher helper endpoint:
+    - returns all active users with role='student'
+    - intended for enrollment UI after creating a classroom
+    """
+    if current_user.role != "teacher":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only teachers can fetch students for enrollment",
+        )
+
+    result = await db.execute(
+        select(User).where(User.role == "student", User.is_active.is_(True))
+    )
+    return list(result.scalars().all())
+
+
 @router.post("/{classroom_id}/students", status_code=status.HTTP_201_CREATED)
 async def add_student_to_classroom(
     classroom_id: uuid.UUID,

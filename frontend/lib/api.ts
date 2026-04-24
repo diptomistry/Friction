@@ -104,6 +104,9 @@ export const getClassroomStudents = (classroomId: string) =>
     `/api/classrooms/${encodeURIComponent(classroomId)}/students`
   );
 
+export const getAllStudents = () =>
+  api.get<ClassroomStudent[]>("/api/classrooms/students/all");
+
 export const getMarks = () => api.get<MarkRecord[]>("/api/marks");
 
 // ─── Marks ───────────────────────────────────────────────────────────────────

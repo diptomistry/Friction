@@ -25,6 +25,7 @@ Interactive docs: `http://localhost:8000/docs`
    - [DELETE /api/admin/users/{user_id}](#delete-apiadminusersuser_id)
 3. [Classroom Endpoints](#3-classroom-endpoints)
    - [GET /api/classrooms](#get-apiclassrooms)
+   - [GET /api/classrooms/students/all](#get-apiclassroomsstudentsall)
    - [POST /api/classrooms](#post-apiclassrooms)
    - [POST /api/classrooms/{classroom_id}/students](#post-apiclassroomsclassroom_idstudents)
    - [GET /api/classrooms/{classroom_id}/students](#get-apiclassroomsclassroom_idstudents)
@@ -291,6 +292,15 @@ Teacher creates a classroom.
   "name": "Physics - Section A"
 }
 ```
+
+### GET /api/classrooms/students/all
+
+Teacher enrollment helper endpoint.
+
+**Auth:** `Bearer <token>` required (secure auth)  
+**Role:** `teacher` only
+
+Returns all active users with role `student`, so frontend can pick and enroll them into a classroom.
 
 ### POST /api/classrooms/{classroom_id}/students
 

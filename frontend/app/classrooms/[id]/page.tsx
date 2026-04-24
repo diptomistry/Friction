@@ -8,12 +8,20 @@ import ExploitHint from "@/components/ExploitHint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import {
   enrollStudent,
+  getAllStudents,
   getClassrooms,
   getClassroomStudents,
   getMarks,
+  type ClassroomStudent,
   type ClassroomRecord,
   secureUpdateMarks,
   type MarkRecord,
@@ -149,7 +157,8 @@ export default function ClassroomDetailPage() {
   const { user, token, hasHydrated } = useStore();
 
   const [students, setStudents] = useState<Student[]>([]);
-  const [studentIdInput, setStudentIdInput] = useState("");
+  const [availableStudents, setAvailableStudents] = useState<ClassroomStudent[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [enrolling, setEnrolling] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [classroomMeta, setClassroomMeta] = useState<ClassroomRecord | null>(null);
@@ -223,14 +232,39 @@ export default function ClassroomDetailPage() {
     void loadClassroomData();
   }, [hasHydrated, token, user, loadClassroomData]);
 
+  useEffect(() => {
+    if (!hasHydrated || !token || !isTeacher) return;
+    const loadAllStudents = async () => {
+      try {
+        const { data } = await getAllStudents();
+        setAvailableStudents(data);
+      } catch {
+        toast.error("Could not load student list.");
+      }
+    };
+    void loadAllStudents();
+  }, [hasHydrated, token, isTeacher]);
+
   const handleEnroll = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentIdInput.trim()) return;
+    if (!selectedStudentIds.length) return;
     setEnrolling(true);
     try {
-      await enrollStudent(id, studentIdInput.trim());
-      toast.success("Student enrolled.");
-      setStudentIdInput("");
+      const results = await Promise.allSettled(
+        selectedStudentIds.map((studentId) => enrollStudent(id, studentId))
+      );
+      const successCount = results.filter((r) => r.status === "fulfilled").length;
+      const failCount = results.length - successCount;
+      if (successCount > 0) {
+        toast.success(
+          failCount > 0
+            ? `${successCount} student(s) enrolled, ${failCount} failed.`
+            : `${successCount} student(s) enrolled.`
+        );
+      } else {
+        toast.error("Could not enroll selected students.");
+      }
+      setSelectedStudentIds([]);
       await loadClassroomData();
     } catch (err: unknown) {
       const detail =
@@ -247,6 +281,9 @@ export default function ClassroomDetailPage() {
       prev.map((s) => (s.id === studentId ? { ...s, marks } : s))
     );
   };
+
+  const enrolledIds = new Set(students.map((s) => s.id));
+  const selectableStudents = availableStudents.filter((s) => !enrolledIds.has(s.id));
 
   if (!hasHydrated || !user) return null;
 
@@ -282,17 +319,39 @@ export default function ClassroomDetailPage() {
               <UserPlus className="h-4 w-4 text-violet-500" />
               Enroll a student
             </h2>
-            <form onSubmit={handleEnroll} className="flex gap-2">
-              <Input
-                placeholder="Student UUID"
-                value={studentIdInput}
-                onChange={(e) => setStudentIdInput(e.target.value)}
-                required
-                className="rounded-xl"
-              />
+            <form onSubmit={handleEnroll} className="flex gap-2 items-center">
+              <DropdownMenu>
+                <DropdownMenuTrigger className="inline-flex h-9 min-w-[240px] items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50">
+                  {selectedStudentIds.length
+                    ? `${selectedStudentIds.length} student(s) selected`
+                    : "Select students"}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-80 max-h-80 overflow-y-auto rounded-xl">
+                  {selectableStudents.length === 0 ? (
+                    <div className="px-2 py-2 text-xs text-slate-500">
+                      No available students to enroll.
+                    </div>
+                  ) : (
+                    selectableStudents.map((student) => (
+                      <DropdownMenuCheckboxItem
+                        key={student.id}
+                        checked={selectedStudentIds.includes(student.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedStudentIds((prev) => {
+                            if (checked) return [...prev, student.id];
+                            return prev.filter((id) => id !== student.id);
+                          });
+                        }}
+                      >
+                        {student.email}
+                      </DropdownMenuCheckboxItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 type="submit"
-                disabled={enrolling}
+                disabled={enrolling || selectedStudentIds.length === 0}
                 size="sm"
                 className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white shrink-0"
               >
