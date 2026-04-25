@@ -23,6 +23,10 @@ from app.models import TokenBlacklist, User
 bearer_scheme = HTTPBearer()
 
 
+def _user_revocation_jti(user_id: str) -> str:
+    return f"revoked-user:{user_id}"
+
+
 async def _extract_payload(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
@@ -71,10 +75,11 @@ async def get_current_user_secure(
     jti = payload.get("jti")
     user_id = payload.get("sub")
 
+    user_revocation_jti = _user_revocation_jti(str(user_id))
     # Friction point 1: reject blacklisted tokens immediately
     bl_result = await db.execute(
         select(TokenBlacklist).where(
-            TokenBlacklist.jti == jti,
+            TokenBlacklist.jti.in_([jti, user_revocation_jti]),
             TokenBlacklist.expires_at > datetime.utcnow(),
         )
     )

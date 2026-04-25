@@ -6,7 +6,12 @@ import { ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import AppSidebarLayout from "@/components/AppSidebarLayout";
 import { useStore } from "@/lib/store";
-import { deleteAdminUser, listAdminUsers, type AdminUser } from "@/lib/api";
+import {
+  deleteAdminUserInsecure,
+  deleteAdminUserSecure,
+  listAdminUsers,
+  type AdminUser,
+} from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,7 +59,11 @@ export default function ManageUsersPage() {
   ) => {
     setDeletingId(target.id);
     try {
-      await deleteAdminUser(target.id);
+      if (mode === "jwt-only") {
+        await deleteAdminUserInsecure(target.id);
+      } else {
+        await deleteAdminUserSecure(target.id);
+      }
       setUsers((prev) => prev.filter((u) => u.id !== target.id));
       setOutcome({ mode, userEmail: target.email });
       toast.success(`Deleted ${target.email}`);

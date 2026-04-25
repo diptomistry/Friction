@@ -18,7 +18,9 @@ from app.routers import classrooms
 from app.routers import files
 from app.routers import marks
 from app.routers.insecure import files as insecure_files
+from app.routers.insecure import admin as insecure_admin
 from app.routers.insecure import marks as insecure_marks
+from app.routers.secure import admin as secure_admin
 from app.routers.secure import files as secure_files
 from app.routers.secure import marks as secure_marks
 
@@ -50,8 +52,10 @@ app.include_router(files.router)
 app.include_router(marks.router)
 app.include_router(insecure_marks.router)
 app.include_router(insecure_files.router)
+app.include_router(insecure_admin.router)
 app.include_router(secure_marks.router)
 app.include_router(secure_files.router)
+app.include_router(secure_admin.router)
 
 
 @app.get("/", tags=["health"])

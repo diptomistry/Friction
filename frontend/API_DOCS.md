@@ -41,7 +41,8 @@ Global visibility rule:
    - [GET /api/admin/users](#get-apiadminusers)
    - [GET /api/admin/users/{user_id}](#get-apiadminusersuser_id)
    - [PATCH /api/admin/users/{user_id}](#patch-apiadminusersuser_id)
-   - [DELETE /api/admin/users/{user_id}](#delete-apiadminusersuser_id)
+   - [DELETE /api/insecure/admin/users/{user_id}](#delete-apiinsecureadminusersuser_id)
+   - [DELETE /api/secure/admin/users/{user_id}](#delete-apisecureadminusersuser_id)
 3. [Classroom Endpoints](#3-classroom-endpoints)
    - [GET /api/classrooms](#get-apiclassrooms)
    - [GET /api/classrooms/students/all](#get-apiclassroomsstudentsall)
@@ -227,7 +228,7 @@ Hard-deletes the authenticated user's account (removes row from `users` and rela
 
 ## 2. Admin Endpoints
 
-All admin endpoints are protected by secure auth + role check:
+Read/list/update admin endpoints are protected by secure auth + role check:
 - must present valid bearer token
 - token must not be blacklisted
 - user must be active
@@ -274,16 +275,33 @@ Update a user's role and/or active status.
 
 Both fields are optional; include only what you want to change.
 
-### DELETE /api/admin/users/{user_id}
+### DELETE /api/insecure/admin/users/{user_id}
 
 Hard delete a user account and related records.
 
-**Auth:** `Bearer <admin-token>` required
+**Auth:** `Bearer <admin-token>` required (insecure auth)  
+**Mode:** **NO FRICTION (VULNERABLE)**  
+**Behavior:** does not add any token revocation marker for deleted user.
 
 **Response `200 OK`**
 ```json
 {
-  "detail": "User deleted successfully"
+  "detail": "User deleted successfully (insecure: no revocation marker added)"
+}
+```
+
+### DELETE /api/secure/admin/users/{user_id}
+
+Hard delete a user account and related records.
+
+**Auth:** `Bearer <admin-token>` required (secure auth)  
+**Mode:** **WITH FRICTION (SECURE)**  
+**Behavior:** adds user-level revocation marker so secure auth rejects deleted user's tokens.
+
+**Response `200 OK`**
+```json
+{
+  "detail": "User deleted successfully (secure: revocation marker added)"
 }
 ```
 
@@ -651,6 +669,7 @@ Confirm upload completion, bind uploaded object to `file_id`, and store checksum
 | **Auth dependency** | Decodes JWT only | Blacklist check + `is_active` check |
 | **Logout** | No-op — token lives 7 days | `jti` inserted to `token_blacklist` immediately |
 | **Delete account** | Hard delete, token not revoked | Hard delete + token blacklisted |
+| **Admin delete user** | `/api/insecure/admin/users/{user_id}` hard delete, no revocation marker | `/api/secure/admin/users/{user_id}` hard delete + user revocation marker |
 | **Marks — role** | Any authenticated user | `teacher` only |
 | **Marks — ownership** | Not checked | Teacher must own classroom |
 | **Marks — enrollment** | Not checked | Student must be in classroom |

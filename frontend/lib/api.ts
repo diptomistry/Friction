@@ -121,8 +121,11 @@ export const deleteAccount = (mode: "insecure" | "secure" = "insecure") =>
 
 export const listAdminUsers = () => api.get<AdminUser[]>("/api/admin/users");
 
-export const deleteAdminUser = (userId: string) =>
-  api.delete(`/api/admin/users/${encodeURIComponent(userId)}`);
+export const deleteAdminUserInsecure = (userId: string) =>
+  api.delete(`/api/insecure/admin/users/${encodeURIComponent(userId)}`);
+
+export const deleteAdminUserSecure = (userId: string) =>
+  api.delete(`/api/secure/admin/users/${encodeURIComponent(userId)}`);
 
 // ─── Classrooms ───────────────────────────────────────────────────────────────
 
