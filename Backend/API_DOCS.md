@@ -66,9 +66,14 @@ Global visibility rule:
 9. [File Upload — Secure](#9-file-upload--secure)
    - [POST /api/secure/files/upload-request](#post-apisecurefilesupload-request)
    - [POST /api/secure/files/upload-confirm](#post-apisecurefilesupload-confirm)
-10. [Friction Comparison Table](#10-friction-comparison-table)
-11. [JWT Payload Reference](#11-jwt-payload-reference)
-12. [Error Reference](#12-error-reference)
+10. [Student Notices](#10-student-notices)
+   - [GET /api/notices](#get-apinotices)
+   - [POST /api/notices](#post-apinotices)
+   - [PATCH /api/notices/{notice_id}](#patch-apinoticesnotice_id)
+   - [DELETE /api/notices/{notice_id}](#delete-apinoticesnotice_id)
+11. [Friction Comparison Table](#11-friction-comparison-table)
+12. [JWT Payload Reference](#12-jwt-payload-reference)
+13. [Error Reference](#13-error-reference)
 
 ---
 
@@ -662,7 +667,84 @@ Confirm upload completion, bind uploaded object to `file_id`, and store checksum
 }
 ```
 
-## 10. Friction Comparison Table
+## 10. Student Notices
+
+Global notice board from admin to all students. No classroom scoping.
+
+### GET /api/notices
+
+List notices.
+
+**Auth:** `Bearer <token>` required (secure auth)
+
+Behavior:
+- `student` sees only published notices
+- `teacher` / `admin` sees all notices
+
+**Response `200 OK`**
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "title": "Midterm Schedule",
+    "body": "Midterm exam starts next Monday at 10 AM.",
+    "created_by": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    "is_published": true,
+    "created_at": "2026-04-25T12:00:00Z",
+    "updated_at": "2026-04-25T12:00:00Z"
+  }
+]
+```
+
+### POST /api/notices
+
+Create a new notice.
+
+**Auth:** `Bearer <token>` required (secure auth)  
+**Role:** `admin` only
+
+**Request body**
+```json
+{
+  "title": "Holiday Notice",
+  "body": "Campus remains closed on Friday.",
+  "is_published": true
+}
+```
+
+### PATCH /api/notices/{notice_id}
+
+Update an existing notice.
+
+**Auth:** `Bearer <token>` required (secure auth)  
+**Role:** `admin` only
+
+**Request body** (all fields optional)
+```json
+{
+  "title": "Updated Holiday Notice",
+  "body": "Campus remains closed on Friday and Saturday.",
+  "is_published": false
+}
+```
+
+### DELETE /api/notices/{notice_id}
+
+Delete a notice.
+
+**Auth:** `Bearer <token>` required (secure auth)  
+**Role:** `admin` only
+
+**Response `200 OK`**
+```json
+{
+  "detail": "Notice deleted"
+}
+```
+
+---
+
+## 11. Friction Comparison Table
 
 | Feature | `/insecure/` | `/secure/` |
 |---------|-------------|------------|
@@ -682,7 +764,7 @@ Confirm upload completion, bind uploaded object to `file_id`, and store checksum
 
 ---
 
-## 11. JWT Payload Reference
+## 12. JWT Payload Reference
 
 ```json
 {
@@ -702,7 +784,7 @@ Confirm upload completion, bind uploaded object to `file_id`, and store checksum
 
 ---
 
-## 12. Error Reference
+## 13. Error Reference
 
 All error responses follow FastAPI's standard shape:
 

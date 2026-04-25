@@ -137,3 +137,30 @@ class FileListItemResponse(BaseModel):
     publish_at: Optional[datetime]
     created_at: datetime
     filename: str
+
+
+# ── Student Notices ───────────────────────────────────────────────────────────
+
+class StudentNoticeCreateRequest(BaseModel):
+    title: str
+    body: str
+    is_published: bool = True
+
+
+class StudentNoticeUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    is_published: Optional[bool] = None
+
+
+class StudentNoticeOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    body: str
+    created_by: Optional[uuid.UUID]
+    is_published: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

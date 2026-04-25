@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Bell,
   BookOpen,
   LayoutDashboard,
   LogOut,
@@ -42,6 +43,7 @@ const navByRole = {
   student: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/classrooms", label: "Classrooms", icon: BookOpen },
+    { href: "/notices", label: "Notices", icon: Bell },
   ],
   teacher: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -51,6 +53,7 @@ const navByRole = {
   admin: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/users", label: "Manage Users", icon: ShieldAlert },
+    { href: "/dashboard/notices", label: "Notices", icon: Bell },
   ],
 } as const;
 

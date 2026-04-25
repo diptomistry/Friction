@@ -92,3 +92,16 @@ alter table files
 alter table marks
   add constraint marks_file_id_fkey
   foreign key (file_id) references files(file_id) on delete cascade;
+
+create table student_notices (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text not null,
+  created_by uuid references users(id) on delete set null,
+  is_published boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index idx_student_notices_published_created_at
+  on student_notices (is_published, created_at desc);

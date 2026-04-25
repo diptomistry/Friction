@@ -99,6 +99,16 @@ export interface FileAccessResponse {
   expires_in?: number;
 }
 
+export interface NoticeRecord {
+  id: string;
+  title: string;
+  body: string;
+  created_by: string;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export const login = (email: string, password: string) =>
   api.post<AuthResponse>("/api/auth/login", { email, password });
 
@@ -206,6 +216,22 @@ export const getClassroomFiles = (classroomId: string) =>
 
 export const getFileDownload = (fileId: string) =>
   api.get<FileAccessResponse>(`/api/files/${encodeURIComponent(fileId)}`);
+
+export const getNotices = () => api.get<NoticeRecord[]>("/api/notices");
+
+export const createNotice = (payload: {
+  title: string;
+  body: string;
+  is_published: boolean;
+}) => api.post<NoticeRecord>("/api/notices", payload);
+
+export const updateNotice = (
+  noticeId: string,
+  payload: Partial<Pick<NoticeRecord, "title" | "body" | "is_published">>
+) => api.patch<NoticeRecord>(`/api/notices/${encodeURIComponent(noticeId)}`, payload);
+
+export const deleteNotice = (noticeId: string) =>
+  api.delete(`/api/notices/${encodeURIComponent(noticeId)}`);
 
 export const secureUploadUrl = (classroomId?: string) =>
   api.get(
