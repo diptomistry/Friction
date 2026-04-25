@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useStore } from "@/lib/store";
-import { deleteAccount } from "@/lib/api";
+import { deleteAccount, getTokenStatus } from "@/lib/api";
 import AppSidebarLayout from "@/components/AppSidebarLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user, token, logout, hasHydrated } = useStore();
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [checkingToken, setCheckingToken] = useState(false);
 
   useEffect(() => {
     if (hasHydrated && !token) {
@@ -40,6 +41,29 @@ export default function DashboardPage() {
       toast.error("Failed to delete account.");
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const handleCheckTokenStatus = async () => {
+    setCheckingToken(true);
+    try {
+      const [{ data: insecure }, { data: secure }] = await Promise.all([
+        getTokenStatus("insecure"),
+        getTokenStatus("secure"),
+      ]);
+      toast.message("Token status checked", {
+        description: `insecure: ${
+          insecure.token_valid ? "valid" : "invalid"
+        } (user_exists: ${insecure.user_exists ? "yes" : "no"}) | secure: ${
+          secure.token_valid ? "valid" : "invalid"
+        } (revoked: ${
+          secure.is_revoked === null ? "n/a" : secure.is_revoked ? "yes" : "no"
+        })`,
+      });
+    } catch {
+      toast.error("Could not check token status.");
+    } finally {
+      setCheckingToken(false);
     }
   };
 
@@ -95,6 +119,15 @@ export default function DashboardPage() {
               <p className="text-xs text-slate-400 mt-1">
                 Member since {new Date(user.created_at).toLocaleDateString()}
               </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCheckTokenStatus}
+                disabled={checkingToken}
+                className="mt-3 rounded-lg"
+              >
+                {checkingToken ? "Checking..." : "Check token status"}
+              </Button>
             </div>
             <div className="h-12 w-12 rounded-full bg-violet-100 flex items-center justify-center">
               <UserCircle className="h-7 w-7 text-violet-600" />

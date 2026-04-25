@@ -109,6 +109,17 @@ export interface NoticeRecord {
   updated_at: string;
 }
 
+export interface TokenStatusResponse {
+  token_valid: boolean;
+  mode: "insecure" | "secure";
+  user_id: string;
+  role: "student" | "teacher" | "admin";
+  jti: string;
+  expires_at: string;
+  is_revoked: boolean | null;
+  user_exists: boolean;
+}
+
 export const login = (email: string, password: string) =>
   api.post<AuthResponse>("/api/auth/login", { email, password });
 
@@ -120,6 +131,9 @@ export const register = (
 
 export const getMe = (mode: "insecure" | "secure" = "secure") =>
   api.get<UserProfile>(`/api/auth/me?mode=${mode}`);
+
+export const getTokenStatus = (mode: "insecure" | "secure" = "insecure") =>
+  api.get<TokenStatusResponse>(`/api/auth/token-status?mode=${mode}`);
 
 export const logout = (mode: "insecure" | "secure" = "insecure") =>
   api.post(`/api/auth/logout?mode=${mode}`);

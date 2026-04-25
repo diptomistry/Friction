@@ -36,6 +36,7 @@ Global visibility rule:
    - [POST /api/auth/login](#post-apiauthlogin)
    - [POST /api/auth/logout](#post-apiauthlogout)
    - [GET /api/auth/me](#get-apiauthme)
+   - [GET /api/auth/token-status](#get-apiauthtoken-status)
    - [DELETE /api/auth/me](#delete-apiauthme)
 2. [Admin Endpoints](#2-admin-endpoints)
    - [GET /api/admin/users](#get-apiadminusers)
@@ -200,6 +201,54 @@ Returns the currently authenticated user's profile.
 | `401` | `Invalid or expired token` |
 | `401` | `Token has been revoked` (secure only) |
 | `401` | `User not found or inactive` (secure only) |
+
+---
+
+### GET /api/auth/token-status
+
+Token diagnostics endpoint to show whether JWT itself is still valid, even if user row is deleted.
+
+**Auth:** `Bearer <token>` required  
+**Query param:** `?mode=insecure` (default) or `?mode=secure`
+
+| Mode | Behaviour |
+|------|-----------|
+| `insecure` | Decodes JWT and returns claims + `user_exists`; does not enforce blacklist/revocation. |
+| `secure` | Decodes JWT and checks blacklist/revocation marker; returns `is_revoked` + effective `token_valid`. |
+
+**Response `200 OK` — insecure**
+```json
+{
+  "token_valid": true,
+  "mode": "insecure",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "role": "student",
+  "jti": "9f27d9d2-bf6f-4af0-a6f8-1f2f4f0a7e33",
+  "expires_at": "2026-05-02T12:00:00",
+  "is_revoked": null,
+  "user_exists": false
+}
+```
+
+**Response `200 OK` — secure**
+```json
+{
+  "token_valid": false,
+  "mode": "secure",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "role": "student",
+  "jti": "9f27d9d2-bf6f-4af0-a6f8-1f2f4f0a7e33",
+  "expires_at": "2026-05-02T12:00:00",
+  "is_revoked": true,
+  "user_exists": false
+}
+```
+
+**Errors**
+
+| Status | Detail |
+|--------|--------|
+| `401` | `Invalid token` |
 
 ---
 

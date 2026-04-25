@@ -21,7 +21,7 @@ from app.auth.utils import (
 )
 from app.database import get_db
 from app.models import Classroom, ClassroomStudent, Mark, TokenBlacklist, User
-from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from app.schemas import LoginRequest, RegisterRequest, TokenResponse, TokenStatusResponse, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -149,6 +149,65 @@ async def me(
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
     return user
+
+
+@router.get("/token-status", response_model=TokenStatusResponse)
+async def token_status(
+    mode: str = Query(default="insecure", pattern="^(secure|insecure)$"),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Token-only diagnostics endpoint for frontend demos.
+    - insecure: signature/expiry + claim view only (no blacklist enforcement).
+    - secure: additionally checks token blacklist / user revocation marker.
+    """
+    try:
+        payload = decode_token(credentials.credentials)
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user_id = payload.get("sub")
+    jti = payload.get("jti")
+    exp = payload.get("exp")
+    role = payload.get("role")
+    expires_at = datetime.utcfromtimestamp(exp) if exp else None
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    user_exists = user is not None
+
+    if mode == "insecure":
+        return TokenStatusResponse(
+            token_valid=True,
+            mode="insecure",
+            user_id=user_id,
+            role=role,
+            jti=jti,
+            expires_at=expires_at,
+            user_exists=user_exists,
+        )
+
+    # WITH FRICTION (SECURE): check both token jti and user-level revocation marker.
+    user_revocation_jti = f"revoked-user:{user_id}"
+    bl = await db.execute(
+        select(TokenBlacklist).where(
+            TokenBlacklist.jti.in_([jti, user_revocation_jti]),
+            TokenBlacklist.expires_at > datetime.utcnow(),
+        )
+    )
+    is_revoked = bl.scalar_one_or_none() is not None
+
+    return TokenStatusResponse(
+        token_valid=not is_revoked,
+        mode="secure",
+        user_id=user_id,
+        role=role,
+        jti=jti,
+        expires_at=expires_at,
+        is_revoked=is_revoked,
+        user_exists=user_exists,
+    )
 
 
 # ── Delete account ────────────────────────────────────────────────────────────
