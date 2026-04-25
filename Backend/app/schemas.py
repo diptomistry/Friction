@@ -64,6 +64,7 @@ class ClassroomOut(BaseModel):
 class MarkUpdateRequest(BaseModel):
     student_id: uuid.UUID
     classroom_id: uuid.UUID
+    file_id: uuid.UUID
     marks: int
 
 
@@ -71,6 +72,7 @@ class MarkOut(BaseModel):
     id: uuid.UUID
     student_id: uuid.UUID
     classroom_id: uuid.UUID
+    file_id: uuid.UUID
     marks: int
     updated_at: datetime
 

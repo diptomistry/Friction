@@ -58,6 +58,7 @@ export interface MarkRecord {
   id: string;
   student_id: string;
   classroom_id: string;
+  file_id: string;
   marks: number;
   updated_at: string;
 }
@@ -150,6 +151,7 @@ export const getMarks = () => api.get<MarkRecord[]>("/api/marks");
 export interface MarkPayload {
   student_id: string;
   classroom_id: string;
+  file_id: string;
   marks: number;
 }
 

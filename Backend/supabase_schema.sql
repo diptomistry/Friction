@@ -28,8 +28,10 @@ create table marks (
   id uuid primary key default gen_random_uuid(),
   student_id uuid references users(id),
   classroom_id uuid references classrooms(id),
+  file_id uuid,
   marks integer,
-  updated_at timestamp default now()
+  updated_at timestamp default now(),
+  unique (student_id, classroom_id, file_id)
 );
 
 -- TOKEN BLACKLIST (FRICTION)
@@ -86,3 +88,7 @@ alter table file_schedules
 alter table files
   alter column publish_at type timestamptz
   using publish_at at time zone 'UTC';
+
+alter table marks
+  add constraint marks_file_id_fkey
+  foreign key (file_id) references files(file_id) on delete cascade;

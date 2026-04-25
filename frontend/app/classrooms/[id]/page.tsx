@@ -60,11 +60,13 @@ const formatCountdown = (targetMs: number, nowMs: number) => {
 function MarksCell({
   student,
   classroomId,
+  fileId,
   isTeacher,
   onUpdate,
 }: {
   student: Student;
   classroomId: string;
+  fileId: string | null;
   isTeacher: boolean;
   onUpdate: (studentId: string, marks: number) => void;
 }) {
@@ -80,9 +82,14 @@ function MarksCell({
     }
     setSaving(true);
     try {
+      if (!fileId) {
+        toast.error("Select a file first.");
+        return;
+      }
       await secureUpdateMarks({
         student_id: student.id,
         classroom_id: classroomId,
+        file_id: fileId,
         marks,
       });
       onUpdate(student.id, marks);
@@ -114,6 +121,10 @@ function MarksCell({
         {student.marks === null ? "—" : `${student.marks}/100`}
       </span>
     );
+  }
+
+  if (!fileId) {
+    return <span className="text-xs text-slate-400">Select file</span>;
   }
 
   if (editing) {
@@ -172,6 +183,7 @@ export default function ClassroomDetailPage() {
   const { user, token, hasHydrated } = useStore();
 
   const [students, setStudents] = useState<Student[]>([]);
+  const [marksRecords, setMarksRecords] = useState<MarkRecord[]>([]);
   const [availableStudents, setAvailableStudents] = useState<ClassroomStudent[]>([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [enrolling, setEnrolling] = useState(false);
@@ -179,6 +191,7 @@ export default function ClassroomDetailPage() {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [classroomMeta, setClassroomMeta] = useState<ClassroomRecord | null>(null);
   const [classroomFiles, setClassroomFiles] = useState<ClassroomFileRecord[]>([]);
+  const [selectedMarkFileId, setSelectedMarkFileId] = useState<string | null>(null);
   const [openingFileId, setOpeningFileId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -196,9 +209,14 @@ export default function ClassroomDetailPage() {
         getClassroomStudents(id),
         getMarks(),
       ]);
+      setMarksRecords(marksRes.data);
 
       const markIndex = marksRes.data
-        .filter((m: MarkRecord) => m.classroom_id === id)
+        .filter(
+          (m: MarkRecord) =>
+            m.classroom_id === id &&
+            (!selectedMarkFileId || m.file_id === selectedMarkFileId)
+        )
         .reduce<Record<string, number>>((acc, mark) => {
           acc[mark.student_id] = mark.marks;
           return acc;
@@ -224,6 +242,7 @@ export default function ClassroomDetailPage() {
       if (user.role === "student") {
         try {
           const { data: marks } = await getMarks();
+          setMarksRecords(marks);
           const selfMark = marks.find(
             (m) => m.classroom_id === id && m.student_id === user.id
           );
@@ -243,7 +262,7 @@ export default function ClassroomDetailPage() {
     } finally {
       setLoadingStudents(false);
     }
-  }, [id, token, user]);
+  }, [id, token, user, selectedMarkFileId]);
 
   useEffect(() => {
     if (!hasHydrated || !token || !user) return;
@@ -270,7 +289,9 @@ export default function ClassroomDetailPage() {
       setLoadingFiles(true);
       try {
         const { data } = await getClassroomFiles(id);
-        setClassroomFiles(Array.isArray(data) ? data : []);
+        const files = Array.isArray(data) ? data : [];
+        setClassroomFiles(files);
+        setSelectedMarkFileId((prev) => prev ?? files[0]?.file_id ?? null);
       } catch {
         setClassroomFiles([]);
       } finally {
@@ -339,6 +360,32 @@ export default function ClassroomDetailPage() {
 
   const enrolledIds = new Set(students.map((s) => s.id));
   const selectableStudents = availableStudents.filter((s) => !enrolledIds.has(s.id));
+  const currentUserId = user?.id;
+  const studentFileMarks = !isTeacher
+    ? classroomFiles
+        .map((file) => {
+          const mark = marksRecords.find(
+            (m) =>
+              m.classroom_id === id &&
+              m.student_id === currentUserId &&
+              m.file_id === file.file_id
+          );
+          return mark
+            ? {
+                fileId: file.file_id,
+                fileName: file.filename ?? file.file_name ?? file.key ?? file.file_id,
+                marks: mark.marks,
+                updatedAt: mark.updated_at,
+              }
+            : null;
+        })
+        .filter(Boolean) as Array<{
+        fileId: string;
+        fileName: string;
+        marks: number;
+        updatedAt: string;
+      }>
+    : [];
 
   if (!hasHydrated || !user) return null;
 
@@ -511,52 +558,115 @@ export default function ClassroomDetailPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <Users className="h-4 w-4 text-slate-500" />
-              Students
-              <Badge variant="secondary" className="text-xs bg-slate-50 text-slate-600">
-                {students.length}
-              </Badge>
-            </h2>
-            {!isTeacher && (
+        {isTeacher && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+            <h2 className="text-sm font-semibold text-slate-800">Marks Scope</h2>
+            <p className="text-xs text-slate-500">
+              Marks are now linked to classroom + file. Select a file to view/update corresponding marks.
+            </p>
+            <select
+              value={selectedMarkFileId ?? ""}
+              onChange={(e) => setSelectedMarkFileId(e.target.value || null)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              disabled={classroomFiles.length === 0}
+            >
+              {classroomFiles.length === 0 ? (
+                <option value="">No files available</option>
+              ) : (
+                classroomFiles.map((file) => (
+                  <option key={file.file_id} value={file.file_id}>
+                    {file.filename ?? file.file_name ?? file.key ?? file.file_id}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+        )}
+
+        {isTeacher ? (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <Users className="h-4 w-4 text-slate-500" />
+                Students
+                <Badge variant="secondary" className="text-xs bg-slate-50 text-slate-600">
+                  {students.length}
+                </Badge>
+              </h2>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {loadingStudents && (
+                <div className="px-5 py-4">
+                  <ApiLoadingState message="Loading students..." compact />
+                </div>
+              )}
+              {students.map((student) => (
+                <div
+                  key={student.id}
+                  className="px-5 py-3.5 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">{student.email}</p>
+                  </div>
+                  <MarksCell
+                    student={student}
+                    classroomId={id}
+                    fileId={selectedMarkFileId}
+                    isTeacher
+                    onUpdate={handleMarkUpdate}
+                  />
+                </div>
+              ))}
+              {!loadingStudents && students.length === 0 && (
+                <div className="px-5 py-4 text-sm text-slate-500">
+                  No students enrolled in this classroom.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <Users className="h-4 w-4 text-slate-500" />
+                Your Marks
+                <Badge variant="secondary" className="text-xs bg-slate-50 text-slate-600">
+                  {studentFileMarks.length}
+                </Badge>
+              </h2>
               <div className="flex items-center gap-1.5 text-xs text-slate-400">
                 <Lock className="h-3 w-3" />
                 <span>Read-only</span>
               </div>
-            )}
-          </div>
-
-          <div className="divide-y divide-slate-100">
-            {loadingStudents && (
-              <div className="px-5 py-4">
-                <ApiLoadingState message="Loading students..." compact />
-              </div>
-            )}
-            {students.map((student) => (
-              <div
-                key={student.id}
-                className="px-5 py-3.5 flex items-center justify-between hover:bg-slate-50/50 transition-colors"
-              >
-                <div>
-                  <p className="text-sm font-medium text-slate-800">{student.email}</p>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {studentFileMarks.map((row) => (
+                <div
+                  key={row.fileId}
+                  className="px-5 py-3.5 flex items-center justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-800 truncate">
+                      {row.fileName}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Updated {new Date(row.updatedAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold text-violet-700">
+                    {row.marks}/100
+                  </span>
                 </div>
-                <MarksCell
-                  student={student}
-                  classroomId={id}
-                  isTeacher={Boolean(isTeacher)}
-                  onUpdate={handleMarkUpdate}
-                />
-              </div>
-            ))}
-            {!loadingStudents && students.length === 0 && (
-              <div className="px-5 py-4 text-sm text-slate-500">
-                No students enrolled in this classroom.
-              </div>
-            )}
+              ))}
+              {studentFileMarks.length === 0 && (
+                <div className="px-5 py-4 text-sm text-slate-500">
+                  No marks published for your files yet.
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {!isTeacher && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
@@ -584,6 +694,7 @@ fetch("${BASE}/api/insecure/marks/update", {
   body: JSON.stringify({
     student_id: "${students[0]?.id ?? "YOUR_STUDENT_ID"}",
     classroom_id: "${id}",
+    file_id: "${selectedMarkFileId ?? "YOUR_FILE_ID"}",
     marks: 100
   })
 }).then(r => r.json()).then(console.log);`
@@ -600,6 +711,7 @@ fetch("${BASE}/api/secure/marks/update", {
   body: JSON.stringify({
     student_id: "${students[0]?.id ?? "YOUR_STUDENT_ID"}",
     classroom_id: "${id}",
+    file_id: "${selectedMarkFileId ?? "YOUR_FILE_ID"}",
     marks: 100
   })
 }).then(r => r.json()).then(console.log);

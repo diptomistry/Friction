@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user_secure
-from app.models import Classroom, ClassroomStudent, Mark, User
+from app.models import Classroom, ClassroomStudent, File, Mark, User
 from app.schemas import MarkOut, MarkUpdateRequest
 
 router = APIRouter(prefix="/api/marks", tags=["marks"])
@@ -30,7 +30,12 @@ async def get_marks(
     db: AsyncSession = Depends(get_db),
 ):
     if current_user.role == "student":
-        result = await db.execute(select(Mark).where(Mark.student_id == current_user.id))
+        result = await db.execute(
+            select(Mark).where(
+                Mark.student_id == current_user.id,
+                Mark.file_id.is_not(None),
+            )
+        )
         return list(result.scalars().all())
 
     if current_user.role == "teacher":
@@ -39,11 +44,16 @@ async def get_marks(
         ).scalars().all()
         if not classroom_ids:
             return []
-        result = await db.execute(select(Mark).where(Mark.classroom_id.in_(classroom_ids)))
+        result = await db.execute(
+            select(Mark).where(
+                Mark.classroom_id.in_(classroom_ids),
+                Mark.file_id.is_not(None),
+            )
+        )
         return list(result.scalars().all())
 
     # admin
-    result = await db.execute(select(Mark))
+    result = await db.execute(select(Mark).where(Mark.file_id.is_not(None)))
     return list(result.scalars().all())
 
 
@@ -85,11 +95,23 @@ async def update_marks(
             detail="Student is not enrolled in this classroom",
         )
 
+    file_row = (
+        await db.execute(select(File).where(File.file_id == body.file_id))
+    ).scalar_one_or_none()
+    if not file_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    if file_row.classroom_id != body.classroom_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File does not belong to the provided classroom",
+        )
+
     mark = (
         await db.execute(
             select(Mark).where(
                 Mark.student_id == body.student_id,
                 Mark.classroom_id == body.classroom_id,
+                Mark.file_id == body.file_id,
             )
         )
     ).scalar_one_or_none()
@@ -101,6 +123,7 @@ async def update_marks(
         mark = Mark(
             student_id=body.student_id,
             classroom_id=body.classroom_id,
+            file_id=body.file_id,
             marks=body.marks,
         )
         db.add(mark)

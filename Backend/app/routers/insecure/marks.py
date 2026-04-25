@@ -43,6 +43,7 @@ async def update_marks_insecure(
         select(Mark).where(
             Mark.student_id == body.student_id,
             Mark.classroom_id == body.classroom_id,
+            Mark.file_id == body.file_id,
         )
     )
     mark = result.scalar_one_or_none()
@@ -54,6 +55,7 @@ async def update_marks_insecure(
         mark = Mark(
             student_id=body.student_id,
             classroom_id=body.classroom_id,
+            file_id=body.file_id,
             marks=body.marks,
         )
         db.add(mark)

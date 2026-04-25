@@ -369,6 +369,7 @@ Behavior:
     "id": "01f9...",
     "student_id": "550e8400-e29b-41d4-a716-446655440000",
     "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
     "marks": 95,
     "updated_at": "2026-04-24T10:05:00"
   }
@@ -387,6 +388,7 @@ Teacher edit/upsert endpoint.
 {
   "student_id": "550e8400-e29b-41d4-a716-446655440000",
   "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "marks": 87
 }
 ```
@@ -394,6 +396,7 @@ Teacher edit/upsert endpoint.
 Validation:
 - teacher must own classroom
 - student must be enrolled in classroom
+- file must belong to the provided classroom
 
 ---
 
@@ -415,6 +418,7 @@ Validation:
 {
   "student_id": "550e8400-e29b-41d4-a716-446655440000",
   "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "marks": 95
 }
 ```
@@ -425,6 +429,7 @@ Validation:
   "id": "...",
   "student_id": "550e8400-e29b-41d4-a716-446655440000",
   "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "marks": 95,
   "updated_at": "2026-04-24T10:05:00"
 }
@@ -444,12 +449,14 @@ Validation:
 1. Role must be `teacher`.
 2. Teacher must own the target classroom (`teacher_id = current_user.id`).
 3. Student must be enrolled in that classroom (`classroom_students` row must exist).
+4. File must exist and belong to the target classroom.
 
 **Request body**
 ```json
 {
   "student_id": "550e8400-e29b-41d4-a716-446655440000",
   "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "marks": 95
 }
 ```
@@ -460,6 +467,7 @@ Validation:
   "id": "...",
   "student_id": "550e8400-e29b-41d4-a716-446655440000",
   "classroom_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "file_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "marks": 95,
   "updated_at": "2026-04-24T10:05:00"
 }
@@ -473,7 +481,9 @@ Validation:
 | `403` | `Only teachers can update marks` |
 | `403` | `You do not own this classroom` |
 | `404` | `Classroom not found` |
+| `404` | `File not found` |
 | `400` | `Student is not enrolled in this classroom` |
+| `400` | `File does not belong to the provided classroom` |
 
 ---
 
@@ -644,6 +654,7 @@ Confirm upload completion, bind uploaded object to `file_id`, and store checksum
 | **Marks — role** | Any authenticated user | `teacher` only |
 | **Marks — ownership** | Not checked | Teacher must own classroom |
 | **Marks — enrollment** | Not checked | Student must be in classroom |
+| **Marks — file scope** | Mark keyed by student + classroom + file (no classroom/file consistency check) | Mark keyed by student + classroom + file + classroom/file consistency check |
 | **Upload key** | User-controlled (overwrite risk) | Deterministic `submissions/{classroom_id}/{filename}` |
 | **Upload expiry** | 7 days (604 800 s) | 7 days (604 800 s) |
 | **Scheduling check** | Enforced globally on download | Enforced globally on download |
