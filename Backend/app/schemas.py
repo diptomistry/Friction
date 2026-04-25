@@ -25,13 +25,6 @@ class TokenResponse(BaseModel):
 
 class TokenStatusResponse(BaseModel):
     token_valid: bool
-    mode: str
-    user_id: Optional[uuid.UUID]
-    role: Optional[str]
-    jti: Optional[str]
-    expires_at: Optional[datetime]
-    is_revoked: Optional[bool] = None
-    user_exists: Optional[bool] = None
 
 
 class UserOut(BaseModel):

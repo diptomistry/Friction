@@ -157,11 +157,7 @@ async def token_status(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Token-only diagnostics endpoint for frontend demos.
-    - insecure: signature/expiry + claim view only (no blacklist enforcement).
-    - secure: additionally checks token blacklist / user revocation marker.
-    """
+    """Returns only whether token is currently considered valid."""
     try:
         payload = decode_token(credentials.credentials)
     except JWTError:
@@ -169,24 +165,9 @@ async def token_status(
 
     user_id = payload.get("sub")
     jti = payload.get("jti")
-    exp = payload.get("exp")
-    role = payload.get("role")
-    expires_at = datetime.utcfromtimestamp(exp) if exp else None
-
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    user_exists = user is not None
 
     if mode == "insecure":
-        return TokenStatusResponse(
-            token_valid=True,
-            mode="insecure",
-            user_id=user_id,
-            role=role,
-            jti=jti,
-            expires_at=expires_at,
-            user_exists=user_exists,
-        )
+        return TokenStatusResponse(token_valid=True)
 
     # WITH FRICTION (SECURE): check both token jti and user-level revocation marker.
     user_revocation_jti = f"revoked-user:{user_id}"
@@ -198,16 +179,7 @@ async def token_status(
     )
     is_revoked = bl.scalar_one_or_none() is not None
 
-    return TokenStatusResponse(
-        token_valid=not is_revoked,
-        mode="secure",
-        user_id=user_id,
-        role=role,
-        jti=jti,
-        expires_at=expires_at,
-        is_revoked=is_revoked,
-        user_exists=user_exists,
-    )
+    return TokenStatusResponse(token_valid=not is_revoked)
 
 
 # ── Delete account ────────────────────────────────────────────────────────────

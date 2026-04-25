@@ -111,13 +111,6 @@ export interface NoticeRecord {
 
 export interface TokenStatusResponse {
   token_valid: boolean;
-  mode: "insecure" | "secure";
-  user_id: string;
-  role: "student" | "teacher" | "admin";
-  jti: string;
-  expires_at: string;
-  is_revoked: boolean | null;
-  user_exists: boolean;
 }
 
 export const login = (email: string, password: string) =>

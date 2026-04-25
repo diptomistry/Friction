@@ -54,11 +54,7 @@ export default function DashboardPage() {
       toast.message("Token status checked", {
         description: `insecure: ${
           insecure.token_valid ? "valid" : "invalid"
-        } (user_exists: ${insecure.user_exists ? "yes" : "no"}) | secure: ${
-          secure.token_valid ? "valid" : "invalid"
-        } (revoked: ${
-          secure.is_revoked === null ? "n/a" : secure.is_revoked ? "yes" : "no"
-        })`,
+        } | secure: ${secure.token_valid ? "valid" : "invalid"}`,
       });
     } catch {
       toast.error("Could not check token status.");
