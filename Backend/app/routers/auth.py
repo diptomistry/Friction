@@ -153,11 +153,10 @@ async def me(
 
 @router.get("/token-status", response_model=TokenStatusResponse)
 async def token_status(
-    mode: str = Query(default="insecure", pattern="^(secure|insecure)$"),
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ):
-    """Returns only whether token is currently considered valid."""
+    """Returns only whether token is currently valid."""
     try:
         payload = decode_token(credentials.credentials)
     except JWTError:
@@ -165,11 +164,6 @@ async def token_status(
 
     user_id = payload.get("sub")
     jti = payload.get("jti")
-
-    if mode == "insecure":
-        return TokenStatusResponse(token_valid=True)
-
-    # WITH FRICTION (SECURE): check both token jti and user-level revocation marker.
     user_revocation_jti = f"revoked-user:{user_id}"
     bl = await db.execute(
         select(TokenBlacklist).where(

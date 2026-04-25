@@ -208,25 +208,12 @@ Returns the currently authenticated user's profile.
 
 Token diagnostics endpoint.
 
-**Auth:** `Bearer <token>` required  
-**Query param:** `?mode=insecure` (default) or `?mode=secure`
+**Auth:** `Bearer <token>` required
 
-| Mode | Behaviour |
-|------|-----------|
-| `insecure` | Signature/expiry check only. |
-| `secure` | Signature/expiry + blacklist/revocation check. |
-
-**Response `200 OK` — insecure**
+**Response `200 OK`**
 ```json
 {
   "token_valid": true
-}
-```
-
-**Response `200 OK` — secure**
-```json
-{
-  "token_valid": false
 }
 ```
 

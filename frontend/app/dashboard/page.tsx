@@ -22,10 +22,7 @@ export default function DashboardPage() {
   const { user, token, logout, hasHydrated } = useStore();
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [checkingToken, setCheckingToken] = useState(false);
-  const [tokenStatus, setTokenStatus] = useState<{
-    insecure: boolean;
-    secure: boolean;
-  } | null>(null);
+  const [tokenStatus, setTokenStatus] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (hasHydrated && !token) {
@@ -51,14 +48,8 @@ export default function DashboardPage() {
   const handleCheckTokenStatus = async () => {
     setCheckingToken(true);
     try {
-      const [{ data: insecure }, { data: secure }] = await Promise.all([
-        getTokenStatus("insecure"),
-        getTokenStatus("secure"),
-      ]);
-      setTokenStatus({
-        insecure: insecure.token_valid,
-        secure: secure.token_valid,
-      });
+      const { data } = await getTokenStatus();
+      setTokenStatus(data.token_valid);
       toast.success("Token status checked.");
     } catch {
       toast.error("Could not check token status.");
@@ -128,27 +119,17 @@ export default function DashboardPage() {
               >
                 {checkingToken ? "Checking..." : "Check token status"}
               </Button>
-              {tokenStatus ? (
+              {tokenStatus !== null ? (
                 <div className="mt-2 flex items-center gap-2">
                   <Badge
                     variant="secondary"
                     className={
-                      tokenStatus.insecure
+                      tokenStatus
                         ? "bg-green-50 text-green-700 border-green-200"
                         : "bg-red-50 text-red-700 border-red-200"
                     }
                   >
-                    {tokenStatus.insecure ? "Valid" : "Invalid"}
-                  </Badge>
-                  <Badge
-                    variant="secondary"
-                    className={
-                      tokenStatus.secure
-                        ? "bg-green-50 text-green-700 border-green-200"
-                        : "bg-red-50 text-red-700 border-red-200"
-                    }
-                  >
-                    {tokenStatus.secure ? "Valid" : "Invalid"}
+                    {tokenStatus ? "Valid" : "Invalid"}
                   </Badge>
                 </div>
               ) : null}
