@@ -51,7 +51,6 @@ const navByRole = {
   admin: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/users", label: "Manage Users", icon: ShieldAlert },
-    { href: "/classrooms", label: "Classrooms", icon: BookOpen },
   ],
 } as const;
 
