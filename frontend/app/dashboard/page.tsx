@@ -22,6 +22,10 @@ export default function DashboardPage() {
   const { user, token, logout, hasHydrated } = useStore();
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [checkingToken, setCheckingToken] = useState(false);
+  const [tokenStatus, setTokenStatus] = useState<{
+    insecure: boolean;
+    secure: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (hasHydrated && !token) {
@@ -51,11 +55,11 @@ export default function DashboardPage() {
         getTokenStatus("insecure"),
         getTokenStatus("secure"),
       ]);
-      toast.message("Token status checked", {
-        description: `insecure: ${
-          insecure.token_valid ? "valid" : "invalid"
-        } | secure: ${secure.token_valid ? "valid" : "invalid"}`,
+      setTokenStatus({
+        insecure: insecure.token_valid,
+        secure: secure.token_valid,
       });
+      toast.success("Token status checked.");
     } catch {
       toast.error("Could not check token status.");
     } finally {
@@ -124,6 +128,30 @@ export default function DashboardPage() {
               >
                 {checkingToken ? "Checking..." : "Check token status"}
               </Button>
+              {tokenStatus ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className={
+                      tokenStatus.insecure
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : "bg-red-50 text-red-700 border-red-200"
+                    }
+                  >
+                    {tokenStatus.insecure ? "Valid" : "Invalid"}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className={
+                      tokenStatus.secure
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : "bg-red-50 text-red-700 border-red-200"
+                    }
+                  >
+                    {tokenStatus.secure ? "Valid" : "Invalid"}
+                  </Badge>
+                </div>
+              ) : null}
             </div>
             <div className="h-12 w-12 rounded-full bg-violet-100 flex items-center justify-center">
               <UserCircle className="h-7 w-7 text-violet-600" />
