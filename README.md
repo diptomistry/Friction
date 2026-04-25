@@ -102,3 +102,24 @@ Friction is not just a performance tradeoff.
 Without the right friction:
 
 > systems may become faster… but they also become vulnerable.
+
+---
+
+## Demo Credentials
+
+```json
+{
+  "email": "diptoStudent@gmail.com",
+  "password": "fffftttt"
+}
+
+{
+  "email": "diptoAdmin@gmail.com",
+  "password": "fffftttt"
+}
+
+{
+  "email": "diptoTeacher@gmail.com",
+  "password": "fffftttt"
+}
+```
