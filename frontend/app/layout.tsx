@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ClassroomX — Security Demo",
+  title: "ClassroomX",
   description:
     "A classroom app that demonstrates real security vulnerabilities and how friction-based controls stop them.",
 };
